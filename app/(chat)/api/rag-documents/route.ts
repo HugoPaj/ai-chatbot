@@ -3,11 +3,11 @@ import { VectorStore } from '@/lib/ai/vectorStore';
 import { DocumentProcessor } from '@/lib/ai/documentProcessor';
 import { put } from '@vercel/blob';
 import { ChatSDKError } from '@/lib/errors';
-import path from 'path';
-import fs from 'fs';
-import os from 'os';
+import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import { generateUUID } from '@/lib/utils';
-import { DocumentChunk } from '@/lib/types';
+import type { DocumentChunk } from '@/lib/types';
 
 // Maximum file size: 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
