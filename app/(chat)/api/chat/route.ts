@@ -6,7 +6,12 @@ import {
   streamText,
 } from 'ai';
 import { auth, type UserType } from '@/app/(auth)/auth';
-import { type RequestHints, systemPrompt } from '@/lib/ai/prompts';
+import {
+  type RequestHints,
+  systemPrompt,
+  formatDocumentContext,
+} from '@/lib/ai/prompts';
+import { VectorStore } from '@/lib/ai/vectorStore';
 import {
   createStreamId,
   deleteChatById,
@@ -145,10 +150,53 @@ export async function POST(request: Request) {
     await createStreamId({ streamId, chatId: id });
 
     const stream = createDataStream({
-      execute: (dataStream) => {
+      execute: async (dataStream) => {
+        // Initialize the vector store for document search
+        const vectorStore = new VectorStore();
+
+        // Search for relevant documents based on the user's message
+        const userMessageText =
+          message.parts.find((part) => part.type === 'text')?.text || '';
+        let documentContext = '';
+        let documentSources: string[] = [];
+
+        try {
+          const similarDocs = await vectorStore.searchSimilar(
+            userMessageText,
+            20,
+          );
+
+          if (similarDocs.length > 0) {
+            // Create context from retrieved documents
+            documentContext = formatDocumentContext(similarDocs);
+
+            // Extract unique source filenames
+            documentSources = Array.from(
+              new Set(
+                similarDocs
+                  .filter((doc) => doc.score > 0.7)
+                  .map((doc) => doc.metadata.filename),
+              ),
+            );
+          }
+        } catch (error) {
+          console.error('Error retrieving similar documents:', error);
+          // Continue without document context if there's an error
+        }
+
+        // Build enhanced system prompt with retrieved documents if available
+        let enhancedSystemPrompt = systemPrompt({
+          selectedChatModel,
+          requestHints,
+        });
+
+        if (documentContext) {
+          enhancedSystemPrompt += `\n\nRelevant engineering documents for reference:\n${documentContext}`;
+        }
+
         const result = streamText({
           model: myProvider.languageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel, requestHints }),
+          system: enhancedSystemPrompt,
           messages,
           maxSteps: 5,
           experimental_activeTools:
