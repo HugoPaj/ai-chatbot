@@ -27,17 +27,26 @@ export async function POST(request: Request) {
     const file = formData.get('file') as File;
 
     if (!file) {
-      return new ChatSDKError('bad_request:api', 'No file provided').toResponse();
+      return new ChatSDKError(
+        'bad_request:api',
+        'No file provided',
+      ).toResponse();
     }
 
     // Check file size
     if (file.size > MAX_FILE_SIZE) {
-      return new ChatSDKError('bad_request:api', 'File exceeds maximum size of 10MB').toResponse();
+      return new ChatSDKError(
+        'bad_request:api',
+        'File exceeds maximum size of 10MB',
+      ).toResponse();
     }
 
     // Check file type
     if (!SUPPORTED_TYPES.includes(file.type)) {
-      return new ChatSDKError('bad_request:api', 'Unsupported file type. Please upload PDF, JPEG, or PNG files').toResponse();
+      return new ChatSDKError(
+        'bad_request:api',
+        'Unsupported file type. Please upload PDF, JPEG, or PNG files',
+      ).toResponse();
     }
 
     // Upload to blob storage
@@ -49,14 +58,14 @@ export async function POST(request: Request) {
     // Create a temporary file for processing
     const tempDir = os.tmpdir();
     const tempFilePath = path.join(tempDir, fileName);
-    
+
     // Write the file to disk for processing
     const buffer = Buffer.from(await file.arrayBuffer());
     fs.writeFileSync(tempFilePath, buffer);
 
     // Process the document based on its type
     let documentChunks: DocumentChunk[] = [];
-    
+
     try {
       if (file.type === 'application/pdf') {
         documentChunks = await DocumentProcessor.processPDF(tempFilePath);
@@ -66,7 +75,10 @@ export async function POST(request: Request) {
       }
     } catch (error) {
       console.error('Error processing document:', error);
-      return new ChatSDKError('bad_request:api', 'Failed to process document').toResponse();
+      return new ChatSDKError(
+        'bad_request:api',
+        'Failed to process document',
+      ).toResponse();
     } finally {
       // Clean up the temporary file
       try {
@@ -77,7 +89,10 @@ export async function POST(request: Request) {
     }
 
     if (documentChunks.length === 0) {
-      return new ChatSDKError('bad_request:api', 'No content could be extracted from the document').toResponse();
+      return new ChatSDKError(
+        'bad_request:api',
+        'No content could be extracted from the document',
+      ).toResponse();
     }
 
     // Initialize vector store
@@ -92,7 +107,7 @@ export async function POST(request: Request) {
       message: 'Document successfully uploaded and processed',
       url: blob.url,
       filename: file.name,
-      chunks: documentChunks.length
+      chunks: documentChunks.length,
     });
   } catch (error) {
     console.error('Error in document upload:', error);
@@ -102,5 +117,8 @@ export async function POST(request: Request) {
 
 export async function GET() {
   // This endpoint could be used to retrieve a list of uploaded documents in the future
-  return new ChatSDKError('bad_request:api', 'This endpoint is not yet implemented').toResponse();
+  return new ChatSDKError(
+    'bad_request:api',
+    'This endpoint is not yet implemented',
+  ).toResponse();
 }
