@@ -98,6 +98,7 @@ export class VectorStore {
    */
   private generateDocumentId(doc: DocumentChunk): string {
     // Create a string that uniquely identifies this document based on content and key metadata
+    // Note: doc.metadata.filename already has UUID prefix removed by DocumentProcessor
     const idSource = `${doc.metadata.source}|${doc.metadata.filename}|${doc.metadata.page || ''}|${doc.metadata.section || ''}`;
 
     // Generate a hash of this string to use as ID

@@ -49,15 +49,17 @@ export async function POST(request: Request) {
       ).toResponse();
     }
 
-    // Upload to blob storage
-    const fileName = `${generateUUID()}-${file.name}`;
-    const blob = await put(fileName, file, {
+    // Upload to blob storage - store internal ID separately from display name
+    const fileId = generateUUID();
+    const fileName = file.name;
+    const blobName = `${fileId}-${fileName}`;
+    const blob = await put(blobName, file, {
       access: 'public',
     });
 
     // Create a temporary file for processing
     const tempDir = os.tmpdir();
-    const tempFilePath = path.join(tempDir, fileName);
+    const tempFilePath = path.join(tempDir, blobName);
 
     // Write the file to disk for processing
     const buffer = Buffer.from(await file.arrayBuffer());

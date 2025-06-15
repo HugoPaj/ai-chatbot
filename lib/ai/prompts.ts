@@ -50,7 +50,10 @@ Instructions:
 - If specific technical details are mentioned in the documents, include them
 - If calculations or formulas are referenced, explain them clearly
 - If the information is insufficient to fully answer the question, clearly state what additional information would be needed
-- Cite specific sections or pages when referencing information. When you do so if the file name is "example - Class.pdf" dont mention the "- Class.pdf" part, only mention "example".
+- Cite specific sections or pages when referencing information. For document citations:
+  * If a filename starts with a UUID pattern like "6fd297f1-96c2-4c19-ab29-5ec0969a3dc1-" or any similar UUID-like prefix followed by a hyphen, remove this prefix entirely in your citation
+  * Example: For a document named "6fd297f1-96c2-4c19-ab29-5ec0969a3dc1-Tema 0 - Mecanica.pdf", cite it as "Tema 0 - Mecanica.pdf" or simply "Tema 0 - Mecanica"
+  * When you do so if the file name is "example - Class.pdf" dont mention the "- Class.pdf" part, only mention "example"
 - If the question cannot be answered from the provided context, state this clearly
 - Format the reponses with headers, subheaders, etc. in markdown to ensure it is easy to read and understand. 
 - Return all equations in LaTeX format no matter what, Inline equations are denoted with single dollar signs: $equation$

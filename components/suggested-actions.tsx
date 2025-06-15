@@ -19,24 +19,24 @@ function PureSuggestedActions({
 }: SuggestedActionsProps) {
   const suggestedActions = [
     {
-      title: 'What are the advantages',
-      label: 'of using Next.js?',
-      action: 'What are the advantages of using Next.js?',
+      title: 'Explicame',
+      label: 'el concepto de la entropia',
+      action: 'Que es la entropia en termodinamica?',
     },
     {
-      title: 'Write code to',
-      label: `demonstrate djikstra's algorithm`,
-      action: `Write code to demonstrate djikstra's algorithm`,
+      title: 'Como se expresa',
+      label: `la ecuacion de Bernoulli?`,
+      action: `¿Como se expresa la ecuacion de Bernoulli?`,
     },
     {
-      title: 'Help me write an essay',
-      label: `about silicon valley`,
-      action: `Help me write an essay about silicon valley`,
+      title: 'Cuales son',
+      label: `las ecuaciones de Maxwell?`,
+      action: `¿Cuales son las ecuaciones de Maxwell?`,
     },
     {
-      title: 'What is the weather',
-      label: 'in San Francisco?',
-      action: 'What is the weather in San Francisco?',
+      title: 'Que es',
+      label: 'la ecuacion de Navier-Stokes?',
+      action: '¿Que es la ecuacion de Navier-Stokes?',
     },
   ];
 
