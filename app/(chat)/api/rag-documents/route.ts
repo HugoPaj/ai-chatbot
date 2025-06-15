@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { generateUUID } from '@/lib/utils';
 import type { DocumentChunk } from '@/lib/types';
+import crypto from 'crypto';
 
 // Maximum file size: 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -65,14 +66,26 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     fs.writeFileSync(tempFilePath, buffer);
 
+    // Calculate content hash for deduplication
+    const contentHash = crypto
+      .createHash('sha256')
+      .update(buffer)
+      .digest('hex');
+
     // Process the document based on its type
     let documentChunks: DocumentChunk[] = [];
 
     try {
       if (file.type === 'application/pdf') {
-        documentChunks = await DocumentProcessor.processPDF(tempFilePath);
+        documentChunks = await DocumentProcessor.processPDF(
+          tempFilePath,
+          contentHash,
+        );
       } else if (file.type.startsWith('image/')) {
-        const singleChunk = await DocumentProcessor.processImage(tempFilePath);
+        const singleChunk = await DocumentProcessor.processImage(
+          tempFilePath,
+          contentHash,
+        );
         documentChunks = [singleChunk];
       }
     } catch (error) {

@@ -72,7 +72,10 @@ const chunkText = (
 
 // Functions to process different document types
 export const DocumentProcessor = {
-  processPDF: async (filePath: string): Promise<DocumentChunk[]> => {
+  processPDF: async (
+    filePath: string,
+    contentHash?: string,
+  ): Promise<DocumentChunk[]> => {
     try {
       console.log(`    📖 Reading PDF file: ${filePath}`);
       // Check if file exists before attempting to read it
@@ -102,6 +105,7 @@ export const DocumentProcessor = {
             page: Math.floor(index / 2) + 1, // Estimate page number
             type: 'pdf',
             filename,
+            contentHash: contentHash || '', // Include content hash for deduplication
           },
         }),
       );
@@ -111,7 +115,10 @@ export const DocumentProcessor = {
     }
   },
 
-  processImage: async (filePath: string): Promise<DocumentChunk> => {
+  processImage: async (
+    filePath: string,
+    contentHash?: string,
+  ): Promise<DocumentChunk> => {
     try {
       // For now, just store image metadata
       // In the future, you could add OCR with Tesseract.js
@@ -123,6 +130,7 @@ export const DocumentProcessor = {
           source: filePath,
           type: 'image',
           filename,
+          contentHash: contentHash || '', // Include content hash for deduplication
         },
       };
     } catch (error) {
