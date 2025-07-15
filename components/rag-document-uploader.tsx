@@ -16,7 +16,8 @@ export function RagDocumentUploader() {
     if (!supportedTypes.includes(file.type)) {
       toast({
         type: 'error',
-        description: 'Unsupported file type. Please upload PDF, JPEG, or PNG files only.'
+        description:
+          'Unsupported file type. Please upload PDF, JPEG, or PNG files only.',
       });
       return;
     }
@@ -26,7 +27,7 @@ export function RagDocumentUploader() {
     if (file.size > maxSize) {
       toast({
         type: 'error',
-        description: 'File too large. Maximum file size is 10MB.'
+        description: 'File too large. Maximum file size is 10MB.',
       });
       return;
     }
@@ -48,16 +49,17 @@ export function RagDocumentUploader() {
       }
 
       const result = await response.json();
-      
+
       toast({
         type: 'success',
-        description: `Document uploaded: ${file.name} was successfully processed with ${result.chunks} chunks.`
+        description: `Document uploaded: ${file.name} was successfully processed with ${result.chunks} chunks.`,
       });
     } catch (error) {
       console.error('Error uploading document:', error);
       toast({
         type: 'error',
-        description: error instanceof Error ? error.message : 'Failed to upload document'
+        description:
+          error instanceof Error ? error.message : 'Failed to upload document',
       });
     } finally {
       setIsUploading(false);
@@ -70,24 +72,28 @@ export function RagDocumentUploader() {
     <div className="px-3 py-2">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-medium">Document Knowledge Base</h3>
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="h-7 w-7" 
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
           onClick={() => setShowInfo(!showInfo)}
           title="About Document Knowledge Base"
         >
           <AlertCircle className="h-4 w-4" />
         </Button>
       </div>
-      
+
       {showInfo && (
         <div className="mb-3 text-xs text-muted-foreground p-2 bg-muted rounded-md">
-          <p>Upload engineering documents (PDF, JPEG, PNG) to enhance the AI&apos;s knowledge. The AI will reference these documents when answering your questions.</p>
+          <p>
+            Upload documents (PDF, JPEG, PNG) to enhance the AI&apos;s
+            knowledge. The AI will reference these documents when answering your
+            questions.
+          </p>
           <p className="mt-1">Maximum file size: 10MB</p>
         </div>
       )}
-      
+
       <div className="relative">
         <input
           type="file"
@@ -97,9 +103,9 @@ export function RagDocumentUploader() {
           accept=".pdf,.jpg,.jpeg,.png"
           disabled={isUploading}
         />
-        <Button 
-          variant="outline" 
-          className="w-full flex items-center justify-center" 
+        <Button
+          variant="outline"
+          className="w-full flex items-center justify-center"
           disabled={isUploading}
         >
           {isUploading ? (

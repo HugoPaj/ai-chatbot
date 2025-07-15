@@ -256,7 +256,7 @@ export class VectorStore {
 
   async searchSimilar(
     query: string,
-    topK: number = 10,
+    topK: number = 20,
   ): Promise<SearchResult[]> {
     try {
       const queryEmbedding =
