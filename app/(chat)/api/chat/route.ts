@@ -159,15 +159,24 @@ export async function POST(request: Request) {
           message.parts.find((part) => part.type === 'text')?.text || '';
         let documentContext = '';
         let documentSources: string[] = [];
+        let hasImageAttachments = false;
+
+        // Check if message contains images
+        const imageAttachments = message.experimental_attachments?.filter(
+          (attachment) => attachment.contentType?.startsWith('image/')
+        ) || [];
+        hasImageAttachments = imageAttachments.length > 0;
 
         try {
-          const similarDocs = await vectorStore.searchSimilar(
+          // Use multimodal search if available, otherwise fallback to regular search
+          const similarDocs = await vectorStore.searchMultimodal(
             userMessageText,
             20,
+            'both' // Search both text and visual embeddings
           );
 
           if (similarDocs.length > 0) {
-            // Create context from retrieved documents
+            // Create context from retrieved documents with multimodal information
             documentContext = formatDocumentContext(similarDocs);
 
             // Extract unique source filenames
@@ -178,10 +187,44 @@ export async function POST(request: Request) {
                   .map((doc) => doc.metadata.filename),
               ),
             );
+
+            // Add information about visual content if found
+            const visualMatches = similarDocs.filter(
+              (doc) => doc.contentType === 'image' || doc.contentType === 'multimodal'
+            );
+            if (visualMatches.length > 0) {
+              documentContext += '\n\nVisual Content Found:\n';
+              visualMatches.forEach((doc) => {
+                documentContext += `- ${doc.metadata.filename}: ${doc.contentType} content`;
+                if (doc.ocrText) {
+                  documentContext += ` (contains text: "${doc.ocrText.substring(0, 100)}...")`;
+                }
+                documentContext += '\n';
+              });
+            }
           }
         } catch (error) {
           console.error('Error retrieving similar documents:', error);
-          // Continue without document context if there's an error
+          // Fallback to regular search if multimodal search fails
+          try {
+            const similarDocs = await vectorStore.searchSimilar(
+              userMessageText,
+              20,
+            );
+
+            if (similarDocs.length > 0) {
+              documentContext = formatDocumentContext(similarDocs);
+              documentSources = Array.from(
+                new Set(
+                  similarDocs
+                    .filter((doc) => doc.score > 0.7)
+                    .map((doc) => doc.metadata.filename),
+                ),
+              );
+            }
+          } catch (fallbackError) {
+            console.error('Fallback document search also failed:', fallbackError);
+          }
         }
 
         // Build enhanced system prompt with retrieved documents if available

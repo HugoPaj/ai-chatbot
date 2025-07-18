@@ -3,6 +3,16 @@ import * as pdfParse from 'pdf-parse';
 import { readFile } from 'node:fs/promises';
 import type { DocumentChunk } from '../types';
 import fs from 'node:fs';
+import { OCRService } from './ocr';
+import { EmbeddingService, type ImageData, type MultimodalEmbeddingResult } from './embeddings';
+
+export interface MultimodalDocumentChunk extends DocumentChunk {
+  visualEmbedding?: number[];
+  textEmbedding?: number[];
+  ocrText?: string;
+  contentType: 'text' | 'image' | 'multimodal';
+  imageData?: ImageData;
+}
 
 // Helper function to clean filename from UUID prefix
 const cleanFilename = (filePath: string, defaultName: string): string => {
@@ -132,6 +142,88 @@ export const DocumentProcessor = {
           filename,
           contentHash: contentHash || '', // Include content hash for deduplication
         },
+      };
+    } catch (error) {
+      console.error(`    ❌ Error processing image ${filePath}:`, error);
+      throw new Error(`Failed to process image: ${filePath}`);
+    }
+  },
+
+  processImageMultimodal: async (
+    filePath: string,
+    contentHash?: string,
+  ): Promise<MultimodalDocumentChunk> => {
+    try {
+      console.log(`    🖼️  Processing image with multimodal approach: ${filePath}`);
+      
+      // Check if file exists
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`Image file not found: ${filePath}`);
+      }
+
+      const filename = cleanFilename(filePath, 'unknown.jpg');
+      const imageBuffer = await readFile(filePath);
+      
+      // Determine mime type from file extension
+      const ext = filePath.toLowerCase().split('.').pop() || '';
+      const mimeType: 'image/jpeg' | 'image/png' = ext === 'png' ? 'image/png' : 'image/jpeg';
+      
+      // Preprocess and convert to base64 for embedding
+      const imageData = await EmbeddingService.preprocessImageForEmbedding(imageBuffer, {
+        maxWidth: 1024,
+        maxHeight: 1024,
+        quality: 85,
+      });
+      
+      // Extract text using OCR
+      console.log(`    📝 Extracting text from image using OCR...`);
+      let ocrText = '';
+      let textEmbedding: number[] | undefined;
+      
+      try {
+        const ocrResult = await OCRService.extractText(imageBuffer);
+        ocrText = ocrResult.text;
+        console.log(`    📄 OCR extracted ${ocrText.length} characters (confidence: ${ocrResult.confidence.toFixed(1)}%)`);
+        
+        // Generate text embedding if OCR found text
+        if (OCRService.isTextPresent(ocrResult, 60)) {
+          textEmbedding = await EmbeddingService.generateSingleEmbedding(ocrText, 'document');
+          console.log(`    🔤 Generated text embedding for OCR content`);
+        }
+      } catch (ocrError) {
+        console.warn(`    ⚠️  OCR failed for ${filePath}:`, ocrError);
+        // Continue processing without OCR text
+      }
+      
+      // Generate visual embedding using multimodal model
+      console.log(`    👁️  Generating visual embedding...`);
+      const visualEmbeddingResult = await EmbeddingService.generateSingleMultimodalEmbedding(
+        imageData,
+        'document'
+      );
+      
+      // Create content description
+      const contentDescription = ocrText.length > 0 
+        ? `Image: ${filename}. OCR Text: ${ocrText}` 
+        : `Image: ${filename}. This image contains visual content that may include diagrams, charts, photographs, or other visual information.`;
+      
+      const contentType = ocrText.length > 0 ? 'multimodal' : 'image';
+      
+      console.log(`    ✅ Successfully processed image as ${contentType} content`);
+      
+      return {
+        content: contentDescription,
+        metadata: {
+          source: filePath,
+          type: 'image',
+          filename,
+          contentHash: contentHash || '',
+        },
+        visualEmbedding: visualEmbeddingResult.embedding,
+        textEmbedding,
+        ocrText: ocrText || undefined,
+        contentType,
+        imageData,
       };
     } catch (error) {
       console.error(`    ❌ Error processing image ${filePath}:`, error);

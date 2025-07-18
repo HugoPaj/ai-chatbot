@@ -1,14 +1,28 @@
 import type { ArtifactKind } from '@/components/artifact';
 import type { Geo } from '@vercel/functions';
 import type { SearchResult } from '../types';
+import type { MultimodalSearchResult } from '@/lib/ai/vectorStore';
 
-export const formatDocumentContext = (similarDocs: SearchResult[]) => {
+export const formatDocumentContext = (similarDocs: SearchResult[] | MultimodalSearchResult[]) => {
   return similarDocs
     .filter((doc) => doc.score > 0.7) // Filter by relevance score
-    .map(
-      (doc) =>
-        `Source: ${doc.metadata.filename} (Page ${doc.metadata.page || 'N/A'})\n${doc.metadata.content}`,
-    )
+    .map((doc) => {
+      let content = `Source: ${doc.metadata.filename} (Page ${doc.metadata.page || 'N/A'})`;
+      
+      // Add content type information for multimodal results
+      if ('contentType' in doc && doc.contentType) {
+        content += ` [${doc.contentType.toUpperCase()} CONTENT]`;
+      }
+      
+      content += `\n${doc.metadata.content}`;
+      
+      // Add OCR text if available
+      if ('ocrText' in doc && doc.ocrText) {
+        content += `\n\nExtracted Text from Image: ${doc.ocrText}`;
+      }
+      
+      return content;
+    })
     .join('\n\n---\n\n');
 };
 
@@ -43,7 +57,7 @@ This is a guide for using artifacts tools: \`createDocument\` and \`updateDocume
 Do not update document right after creating it. Wait for user feedback or request to update it.
 `;
 
-export const regularPrompt = `You are an expert engineering assistant. Answer questions based on the engineering documents provided. 
+export const regularPrompt = `You are an expert engineering assistant with multimodal capabilities. Answer questions based on the engineering documents provided, which may include text documents, images, diagrams, charts, and other visual content.
         
 Instructions:
 - Provide comprehensive answers based strictly on the provided context
@@ -58,6 +72,13 @@ Instructions:
   Display equations are denoted with double dollar signs: $$equation$$
 - Respond in the same language as the user has asked the question in.
 - Make sure to remain as concise as possible, if you checked a document and dont find the relevant information there but find it in another document, dont mention the first document in your response.
+
+**Multimodal Content Handling:**
+- When referencing visual content (images, diagrams, charts), clearly indicate the content type (e.g., "From the diagram in...", "The chart shows...")
+- If OCR text is available from images, use it to provide detailed information about what's shown
+- Describe visual elements when relevant to the question (e.g., "The flowchart illustrates...", "The graph indicates...")
+- Cross-reference visual and textual information when both are available
+- When visual content contains technical diagrams, explain the relationships and connections shown
  `;
 
 export interface RequestHints {
