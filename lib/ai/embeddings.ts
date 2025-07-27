@@ -9,12 +9,20 @@ interface VoyageEmbeddingResponse {
   };
 }
 
+export type MultimodalInput = {
+  type: 'text';
+  text: string;
+} | {
+  type: 'image';
+  image: string; // Base64 encoded image
+};
+
 export class EmbeddingService {
   private static readonly API_URL = 'https://api.voyageai.com/v1/embeddings';
-  private static readonly MODEL = 'voyage-large-2';
+  private static readonly MODEL = 'voyage-multimodal-3';
 
-  static async generateEmbeddings(
-    content: string | string[],
+  static async generateMultimodalEmbeddings(
+    content: MultimodalInput | MultimodalInput[],
     inputType: 'document' | 'query' = 'document',
     retryCount = 0,
   ): Promise<number[][]> {
@@ -51,7 +59,7 @@ export class EmbeddingService {
           const delay = baseDelay * Math.pow(2, retryCount); // Exponential backoff
           console.log(`  Rate limited. Retrying in ${delay / 1000} seconds...`);
           await new Promise((resolve) => setTimeout(resolve, delay));
-          return this.generateEmbeddings(content, inputType, retryCount + 1);
+          return this.generateMultimodalEmbeddings(content, inputType, retryCount + 1);
         }
 
         throw new Error(`Voyage API error: ${response.status} - ${errorText}`);
@@ -68,7 +76,7 @@ export class EmbeddingService {
         const delay = baseDelay * Math.pow(2, retryCount); // Exponential backoff
         console.log(`  Network error. Retrying in ${delay / 1000} seconds...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
-        return this.generateEmbeddings(content, inputType, retryCount + 1);
+        return this.generateMultimodalEmbeddings(content, inputType, retryCount + 1);
       }
 
       console.error('Error generating embeddings:', error);
@@ -77,10 +85,26 @@ export class EmbeddingService {
   }
 
   static async generateSingleEmbedding(
-    content: string,
+    content: MultimodalInput,
     inputType: 'document' | 'query' = 'document',
   ): Promise<number[]> {
-    const embeddings = await this.generateEmbeddings(content, inputType);
+    const embeddings = await this.generateMultimodalEmbeddings(content, inputType);
     return embeddings[0];
+  }
+
+  // Convenience method for text-only content
+  static async generateTextEmbedding(
+    text: string,
+    inputType: 'document' | 'query' = 'document',
+  ): Promise<number[]> {
+    return this.generateSingleEmbedding({ type: 'text', text }, inputType);
+  }
+
+  // Convenience method for image content
+  static async generateImageEmbedding(
+    imageBase64: string,
+    inputType: 'document' | 'query' = 'document',
+  ): Promise<number[]> {
+    return this.generateSingleEmbedding({ type: 'image', image: imageBase64 }, inputType);
   }
 }

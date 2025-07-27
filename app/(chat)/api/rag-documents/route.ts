@@ -86,6 +86,8 @@ export async function POST(request: Request) {
           tempFilePath,
           contentHash,
         );
+        // Add the blob URL to the image chunk for future reference
+        singleChunk.metadata.imageUrl = blob.url;
         documentChunks = [singleChunk];
       }
     } catch (error) {

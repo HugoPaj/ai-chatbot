@@ -1,8 +1,38 @@
 // src/lib/documentProcessor.ts
 import * as pdfParse from 'pdf-parse';
 import { readFile } from 'node:fs/promises';
-import type { DocumentChunk } from '../types';
+import type { DocumentChunk, Coordinates, TableStructure } from '../types';
 import fs from 'node:fs';
+
+// Docling service configuration
+const DOCLING_SERVICE_URL = process.env.DOCLING_SERVICE_URL || 'http://localhost:8001';
+
+// Docling service types
+interface DoclingChunk {
+  content: string;
+  content_type: 'text' | 'image' | 'table';
+  page?: number;
+  coordinates?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  image_data?: string;
+  table_structure?: {
+    headers: string[];
+    rows: string[][];
+    caption?: string;
+  };
+}
+
+interface DoclingResponse {
+  success: boolean;
+  chunks: DoclingChunk[];
+  total_pages: number;
+  processing_time: number;
+  error?: string;
+}
 
 // Helper function to clean filename from UUID prefix
 const cleanFilename = (filePath: string, defaultName: string): string => {
@@ -70,6 +100,95 @@ const chunkText = (
   return chunks.filter((chunk) => chunk.length >= 50);
 };
 
+// Helper function to check if Docling service is available
+const isDoclingServiceAvailable = async (): Promise<boolean> => {
+  try {
+    const response = await fetch(`${DOCLING_SERVICE_URL}/health`, {
+      method: 'GET',
+      timeout: 5000,
+    });
+    return response.ok;
+  } catch (error) {
+    console.log(`    ℹ️  Docling service not available at ${DOCLING_SERVICE_URL}`);
+    return false;
+  }
+};
+
+// Enhanced PDF processing using Docling service
+const processWithDocling = async (
+  filePath: string,
+  contentHash?: string,
+): Promise<DocumentChunk[]> => {
+  try {
+    console.log(`    🚀 Processing with Docling service...`);
+    
+    // Read file and create FormData
+    const fileBuffer = await readFile(filePath);
+    const formData = new FormData();
+    
+    // Create a File object from buffer
+    const file = new File([fileBuffer], filePath.split('/').pop() || 'document.pdf', {
+      type: 'application/pdf',
+    });
+    formData.append('file', file);
+
+    // Send to Docling service
+    const response = await fetch(`${DOCLING_SERVICE_URL}/process-document`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Docling service error: ${response.status}`);
+    }
+
+    const doclingResult: DoclingResponse = await response.json();
+
+    if (!doclingResult.success) {
+      throw new Error(`Docling processing failed: ${doclingResult.error}`);
+    }
+
+    console.log(`    ✅ Docling processed ${doclingResult.chunks.length} chunks in ${doclingResult.processing_time.toFixed(2)}s`);
+
+    // Convert Docling chunks to DocumentChunk format
+    const filename = cleanFilename(filePath, 'unknown.pdf');
+    const documentChunks: DocumentChunk[] = doclingResult.chunks.map((chunk, index) => {
+      const coordinates: Coordinates | undefined = chunk.coordinates ? {
+        x: chunk.coordinates.x,
+        y: chunk.coordinates.y,
+        width: chunk.coordinates.width,
+        height: chunk.coordinates.height,
+      } : undefined;
+
+      const tableStructure: TableStructure | undefined = chunk.table_structure ? {
+        headers: chunk.table_structure.headers,
+        rows: chunk.table_structure.rows,
+        caption: chunk.table_structure.caption,
+      } : undefined;
+
+      return {
+        content: chunk.content,
+        metadata: {
+          source: filePath,
+          page: chunk.page || Math.floor(index / 2) + 1,
+          type: 'pdf',
+          filename,
+          contentHash: contentHash || '',
+          contentType: chunk.content_type,
+          coordinates,
+          tableStructure,
+          imageData: chunk.image_data,
+        },
+      };
+    });
+
+    return documentChunks;
+  } catch (error) {
+    console.error(`    ❌ Docling processing failed:`, error);
+    throw error;
+  }
+};
+
 // Functions to process different document types
 export const DocumentProcessor = {
   processPDF: async (
@@ -78,11 +197,27 @@ export const DocumentProcessor = {
   ): Promise<DocumentChunk[]> => {
     try {
       console.log(`    📖 Reading PDF file: ${filePath}`);
+      
       // Check if file exists before attempting to read it
       if (!fs.existsSync(filePath)) {
         throw new Error(`PDF file not found: ${filePath}`);
       }
 
+      // Try enhanced processing with Docling service first
+      const doclingAvailable = await isDoclingServiceAvailable();
+      
+      if (doclingAvailable) {
+        try {
+          return await processWithDocling(filePath, contentHash);
+        } catch (doclingError) {
+          console.warn(`    ⚠️  Docling processing failed, falling back to basic PDF processing`);
+          console.warn(`    Error: ${doclingError}`);
+        }
+      } else {
+        console.log(`    ℹ️  Using basic PDF processing (Docling service not available)`);
+      }
+
+      // Fallback to basic PDF processing
       const dataBuffer = await readFile(filePath);
       const data = await pdfParse.default(dataBuffer);
 
@@ -106,6 +241,7 @@ export const DocumentProcessor = {
             type: 'pdf',
             filename,
             contentHash: contentHash || '', // Include content hash for deduplication
+            contentType: 'text', // PDF text chunks are text content
           },
         }),
       );
@@ -120,17 +256,30 @@ export const DocumentProcessor = {
     contentHash?: string,
   ): Promise<DocumentChunk> => {
     try {
-      // For now, just store image metadata
-      // In the future, you could add OCR with Tesseract.js
+      console.log(`    🖼️  Processing image file: ${filePath}`);
+      
+      // Check if file exists
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`Image file not found: ${filePath}`);
+      }
+
+      // Read image file and convert to base64
+      const imageBuffer = await readFile(filePath);
+      const imageBase64 = imageBuffer.toString('base64');
       const filename = cleanFilename(filePath, 'unknown.jpg');
 
+      console.log(`    📸 Converted image to base64 (${imageBase64.length} chars)`);
+
       return {
-        content: `Engineering diagram/image: ${filename}. This image contains technical content that may include diagrams, charts, schematics, or other visual engineering information.`,
+        content: `Image: ${filename}. This image contains visual content that can be searched and analyzed using multimodal AI.`,
         metadata: {
           source: filePath,
           type: 'image',
           filename,
-          contentHash: contentHash || '', // Include content hash for deduplication
+          contentHash: contentHash || '',
+          contentType: 'image',
+          imageData: imageBase64, // Store base64 data for embedding generation
+          originalImagePath: filePath,
         },
       };
     } catch (error) {

@@ -1,4 +1,20 @@
 export type DataPart = { type: 'append-message'; message: string };
+
+export type ContentType = 'text' | 'image' | 'table';
+
+export interface Coordinates {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface TableStructure {
+  headers: string[];
+  rows: string[][];
+  caption?: string;
+}
+
 export interface DocumentChunk {
   content: string;
   metadata: {
@@ -8,6 +24,13 @@ export interface DocumentChunk {
     section?: string;
     filename: string;
     contentHash?: string;
+    // Multimodal enhancements
+    contentType: ContentType;
+    coordinates?: Coordinates;
+    imageUrl?: string;
+    imageData?: string; // Base64 encoded image data for embedding
+    tableStructure?: TableStructure;
+    originalImagePath?: string; // For image files uploaded directly
   };
 }
 

@@ -1,5 +1,5 @@
 import { Pinecone, PineconeRecord, Index } from '@pinecone-database/pinecone';
-import { DocumentChunk, SearchResult } from '../types';
+import { DocumentChunk, SearchResult, ContentType } from '../types';
 import { EmbeddingService } from './embeddings';
 import crypto from 'crypto';
 
@@ -7,7 +7,7 @@ export class VectorStore {
   private pinecone: Pinecone;
   private indexName: string;
 
-  constructor(indexName: string = 'icai-version0') {
+  constructor(indexName: string = 'icai-multimodal-v1') {
     if (!process.env.PINECONE_API_KEY) {
       throw new Error('PINECONE_API_KEY is not configured');
     }
@@ -24,7 +24,7 @@ export class VectorStore {
    */
   async initialize(): Promise<void> {
     try {
-      const REQUIRED_DIMENSION = 1536; // voyage-large-2 uses 1536-dimensional embeddings
+      const REQUIRED_DIMENSION = 1408; // voyage-multimodal-3 uses 1408-dimensional embeddings
 
       // Check if index exists
       const indexes = await this.pinecone.listIndexes();
@@ -70,7 +70,7 @@ export class VectorStore {
       console.log(`Creating index '${this.indexName}'...`);
       await this.pinecone.createIndex({
         name: this.indexName,
-        dimension: REQUIRED_DIMENSION, // voyage-large-2 uses 1536-dimensional embeddings
+        dimension: REQUIRED_DIMENSION, // voyage-multimodal-3 uses 1408-dimensional embeddings
         metric: 'cosine',
         spec: {
           serverless: {
@@ -194,9 +194,18 @@ export class VectorStore {
             );
           }
 
-          const embedding = await EmbeddingService.generateSingleEmbedding(
-            doc.content,
-          );
+          // Generate appropriate embedding based on content type
+          let embedding: number[];
+
+          if (doc.metadata.contentType === 'image' && doc.metadata.imageData) {
+            embedding = await EmbeddingService.generateImageEmbedding(
+              doc.metadata.imageData,
+            );
+          } else {
+            embedding = await EmbeddingService.generateTextEmbedding(
+              doc.content,
+            );
+          }
 
           vectors.push({
             id: id, // Use the consistent document ID
@@ -209,6 +218,12 @@ export class VectorStore {
               filename: doc.metadata.filename,
               section: doc.metadata.section || '',
               contentHash: doc.metadata.contentHash || '',
+              // Multimodal metadata
+              contentType: doc.metadata.contentType,
+              coordinates: doc.metadata.coordinates,
+              imageUrl: doc.metadata.imageUrl,
+              tableStructure: doc.metadata.tableStructure,
+              originalImagePath: doc.metadata.originalImagePath,
             },
           });
 
@@ -257,10 +272,13 @@ export class VectorStore {
   async searchSimilar(
     query: string,
     topK: number = 20,
+    contentTypeFilter?: ContentType,
   ): Promise<SearchResult[]> {
     try {
-      const queryEmbedding =
-        await EmbeddingService.generateSingleEmbedding(query);
+      const queryEmbedding = await EmbeddingService.generateTextEmbedding(
+        query,
+        'query',
+      );
       const index = this.pinecone.index(this.indexName);
 
       const searchResponse = await index.query({
@@ -268,6 +286,9 @@ export class VectorStore {
         topK,
         includeMetadata: true,
         includeValues: false,
+        filter: contentTypeFilter
+          ? { contentType: { $eq: contentTypeFilter } }
+          : undefined,
       });
 
       return (
@@ -278,6 +299,41 @@ export class VectorStore {
       );
     } catch (error) {
       console.error('Error searching vectors:', error);
+      throw error;
+    }
+  }
+
+  // Search using an image
+  async searchSimilarByImage(
+    imageBase64: string,
+    topK: number = 20,
+    contentTypeFilter?: ContentType,
+  ): Promise<SearchResult[]> {
+    try {
+      const queryEmbedding = await EmbeddingService.generateImageEmbedding(
+        imageBase64,
+        'query',
+      );
+      const index = this.pinecone.index(this.indexName);
+
+      const searchResponse = await index.query({
+        vector: queryEmbedding,
+        topK,
+        includeMetadata: true,
+        includeValues: false,
+        filter: contentTypeFilter
+          ? { contentType: { $eq: contentTypeFilter } }
+          : undefined,
+      });
+
+      return (
+        searchResponse.matches?.map((match) => ({
+          score: match.score || 0,
+          metadata: match.metadata as SearchResult['metadata'],
+        })) || []
+      );
+    } catch (error) {
+      console.error('Error searching vectors by image:', error);
       throw error;
     }
   }
