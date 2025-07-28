@@ -8,7 +8,7 @@ export class VectorStore {
   private pinecone: Pinecone;
   private indexName;
 
-  constructor(indexName = 'icai-multimodal-v1') {
+  constructor(indexName = 'multimodal-v1') {
     if (!process.env.PINECONE_API_KEY) {
       throw new Error('PINECONE_API_KEY is not configured');
     }
@@ -25,7 +25,7 @@ export class VectorStore {
    */
   async initialize(): Promise<void> {
     try {
-      const REQUIRED_DIMENSION = 1408; // voyage-multimodal-3 uses 1408-dimensional embeddings
+      const REQUIRED_DIMENSION = 1024; // voyage-multimodal-3 uses 1408-dimensional embeddings
 
       // Check if index exists
       const indexes = await this.pinecone.listIndexes();
@@ -235,13 +235,16 @@ export class VectorStore {
           };
 
           if (doc.metadata.coordinates) {
-            baseMetadata.coordinates = doc.metadata.coordinates;
+            // Pinecone metadata values must be primitive; store coordinates as JSON string
+            baseMetadata.coordinates = JSON.stringify(doc.metadata.coordinates);
           }
           if (doc.metadata.imageUrl) {
             baseMetadata.imageUrl = doc.metadata.imageUrl;
           }
           if (doc.metadata.tableStructure) {
-            baseMetadata.tableStructure = doc.metadata.tableStructure;
+            baseMetadata.tableStructure = JSON.stringify(
+              doc.metadata.tableStructure,
+            );
           }
           if (doc.metadata.originalImagePath) {
             baseMetadata.originalImagePath = doc.metadata.originalImagePath;
