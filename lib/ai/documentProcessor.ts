@@ -114,21 +114,32 @@ const isDoclingServiceAvailable = async (): Promise<boolean> => {
   }
 };
 
-// Enhanced PDF processing using Docling service
+// Enhanced document processing using Docling service
 const processWithDocling = async (
   filePath: string,
   contentHash?: string,
 ): Promise<DocumentChunk[]> => {
   try {
-    console.log(`    🚀 Processing with Docling service...`);
+    console.log(`    🚀 Processing with Docling service for images, text, and tables...`);
     
     // Read file and create FormData
     const fileBuffer = await readFile(filePath);
     const formData = new FormData();
     
+    // Determine file type based on extension
+    const fileExtension = filePath.split('.').pop()?.toLowerCase() || 'pdf';
+    const mimeTypes: Record<string, string> = {
+      'pdf': 'application/pdf',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'html': 'text/html',
+    };
+    
+    const mimeType = mimeTypes[fileExtension] || 'application/pdf';
+    
     // Create a File object from buffer
-    const file = new File([fileBuffer], filePath.split('/').pop() || 'document.pdf', {
-      type: 'application/pdf',
+    const file = new File([fileBuffer], filePath.split('/').pop() || `document.${fileExtension}`, {
+      type: mimeType,
     });
     formData.append('file', file);
 
@@ -139,7 +150,7 @@ const processWithDocling = async (
     });
 
     if (!response.ok) {
-      throw new Error(`Docling service error: ${response.status}`);
+      throw new Error(`Docling service error: ${response.status} ${response.statusText}`);
     }
 
     const doclingResult: DoclingResponse = await response.json();
@@ -149,9 +160,15 @@ const processWithDocling = async (
     }
 
     console.log(`    ✅ Docling processed ${doclingResult.chunks.length} chunks in ${doclingResult.processing_time.toFixed(2)}s`);
+    
+    // Log breakdown by content type
+    const textChunks = doclingResult.chunks.filter(c => c.content_type === 'text').length;
+    const imageChunks = doclingResult.chunks.filter(c => c.content_type === 'image').length;
+    const tableChunks = doclingResult.chunks.filter(c => c.content_type === 'table').length;
+    console.log(`    📊 Content breakdown: ${textChunks} text, ${imageChunks} images, ${tableChunks} tables`);
 
     // Convert Docling chunks to DocumentChunk format
-    const filename = cleanFilename(filePath, 'unknown.pdf');
+    const filename = cleanFilename(filePath, `unknown.${fileExtension}`);
     const documentChunks: DocumentChunk[] = doclingResult.chunks.map((chunk, index) => {
       const coordinates: Coordinates | undefined = chunk.coordinates ? {
         x: chunk.coordinates.x,
@@ -170,7 +187,7 @@ const processWithDocling = async (
         content: chunk.content,
         metadata: {
           source: filePath,
-          page: chunk.page || Math.floor(index / 2) + 1,
+          page: chunk.page || 1,
           type: 'pdf',
           filename,
           contentHash: contentHash || '',
@@ -196,11 +213,11 @@ export const DocumentProcessor = {
     contentHash?: string,
   ): Promise<DocumentChunk[]> => {
     try {
-      console.log(`    📖 Reading PDF file: ${filePath}`);
+      console.log(`    📖 Processing document: ${filePath}`);
       
       // Check if file exists before attempting to read it
       if (!fs.existsSync(filePath)) {
-        throw new Error(`PDF file not found: ${filePath}`);
+        throw new Error(`Document file not found: ${filePath}`);
       }
 
       // Try enhanced processing with Docling service first
@@ -214,15 +231,15 @@ export const DocumentProcessor = {
           console.warn(`    Error: ${doclingError}`);
         }
       } else {
-        console.log(`    ℹ️  Using basic PDF processing (Docling service not available)`);
+        console.log(`    ℹ️  Docling service not available, using basic PDF processing`);
       }
 
-      // Fallback to basic PDF processing
+      // Fallback to basic PDF processing (text only)
+      console.log(`    📖 Using fallback PDF text extraction (no images/tables)`);
       const dataBuffer = await readFile(filePath);
       const data = await pdfParse.default(dataBuffer);
 
-      console.log(`    📝 Extracted ${data.text.length} characters`);
-      console.log(`    📄 Document has ${data.numpages} pages`);
+      console.log(`    📝 Extracted ${data.text.length} characters from ${data.numpages} pages`);
 
       if (!data.text || data.text.trim().length === 0) {
         console.warn(`    ⚠️  No text content found in PDF`);
@@ -237,17 +254,17 @@ export const DocumentProcessor = {
           content: chunk,
           metadata: {
             source: filePath,
-            page: Math.floor(index / 2) + 1, // Estimate page number
+            page: Math.floor(index / 2) + 1,
             type: 'pdf',
             filename,
-            contentHash: contentHash || '', // Include content hash for deduplication
-            contentType: 'text', // PDF text chunks are text content
+            contentHash: contentHash || '',
+            contentType: 'text',
           },
         }),
       );
     } catch (error) {
-      console.error(`    ❌ Error processing PDF ${filePath}:`, error);
-      throw new Error(`Failed to process PDF: ${filePath}`);
+      console.error(`    ❌ Error processing document ${filePath}:`, error);
+      throw new Error(`Failed to process document: ${filePath}`);
     }
   },
 
