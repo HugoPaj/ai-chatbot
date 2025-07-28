@@ -123,14 +123,55 @@ def clean_text_content(text: str) -> str:
     
     # Basic cleanup - remove extra whitespace
     text = text.strip()
+    
+    # Remove problematic characters that can break JSON serialization
+    import re
+    
+    # Remove docling-generated HTML comments that clutter the output
+    text = re.sub(r'<!--\s*image\s*-->', '[Image]', text)
+    text = re.sub(r'<!--\s*formula-not-decoded\s*-->', '[Formula]', text)
+    text = re.sub(r'<!--[^>]*-->', '', text)  # Remove any other HTML comments
+    
+    # Remove null bytes and control characters (except tabs and newlines)
+    text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
+    
+    # Remove problematic Unicode characters that cause API issues
+    text = re.sub(r'[\uE000-\uF8FF]', '', text)  # Private Use Area
+    text = re.sub(r'[\uF000-\uFFFF]', '', text)  # More private use characters
+    
+    # Replace problematic Unicode with ASCII alternatives
+    unicode_replacements = {
+        'ҧ': 'p',  # Cyrillic that looks like Latin p
+        'ሶ': 's',  # Ethiopic that looks like Latin s
+        '→': '->',  # Arrow
+        '←': '<-',  # Arrow
+        '≈': '~=',  # Approximately equal
+        '≠': '!=',  # Not equal
+        '≤': '<=',  # Less than or equal
+        '≥': '>=',  # Greater than or equal
+        '°': 'deg', # Degree symbol
+        'θ': 'theta',  # Greek theta
+        'ρ': 'rho',    # Greek rho
+        'μ': 'mu',     # Greek mu
+        'π': 'pi',     # Greek pi
+        'Δ': 'Delta',  # Greek Delta
+        'σ': 'sigma',  # Greek sigma
+    }
+    
+    for unicode_char, replacement in unicode_replacements.items():
+        text = text.replace(unicode_char, replacement)
+    
     # Normalize line breaks
     text = text.replace('\r\n', '\n').replace('\r', '\n')
+    
     # Remove excessive whitespace but preserve structure
-    import re
     text = re.sub(r' +', ' ', text)  # Multiple spaces to single space
     text = re.sub(r'\n +', '\n', text)  # Remove spaces at start of lines
     text = re.sub(r' +\n', '\n', text)  # Remove spaces at end of lines
     text = re.sub(r'\n{3,}', '\n\n', text)  # Max 2 consecutive line breaks
+    
+    # Ensure the text is valid UTF-8 and safe for JSON
+    text = text.encode('utf-8', 'ignore').decode('utf-8')
     
     return text
 

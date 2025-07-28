@@ -201,10 +201,19 @@ export class VectorStore {
             embedding = await EmbeddingService.generateImageEmbedding(
               doc.metadata.imageData,
             );
+            console.log(`    🖼️ Generated image embedding for ${doc.metadata.filename}`);
           } else {
+            // Validate text content before embedding
+            if (!doc.content || doc.content.trim().length === 0) {
+              console.warn(`    ⚠️ Empty content for document ${doc.metadata.filename}, skipping`);
+              continue;
+            }
+            
+            // The EmbeddingService will handle the text cleaning internally
             embedding = await EmbeddingService.generateTextEmbedding(
               doc.content,
             );
+            console.log(`    📝 Generated text embedding for ${doc.metadata.filename} (${doc.content.length} chars)`);
           }
 
           vectors.push({
