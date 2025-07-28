@@ -1,13 +1,14 @@
-import { Pinecone, PineconeRecord, Index } from '@pinecone-database/pinecone';
-import { DocumentChunk, SearchResult, ContentType } from '../types';
+import { Pinecone } from '@pinecone-database/pinecone';
+import type { PineconeRecord, Index } from '@pinecone-database/pinecone';
+import type { DocumentChunk, SearchResult, ContentType } from '../types';
 import { EmbeddingService } from './embeddings';
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 
 export class VectorStore {
   private pinecone: Pinecone;
-  private indexName: string;
+  private indexName;
 
-  constructor(indexName: string = 'icai-multimodal-v1') {
+  constructor(indexName = 'icai-multimodal-v1') {
     if (!process.env.PINECONE_API_KEY) {
       throw new Error('PINECONE_API_KEY is not configured');
     }
@@ -201,39 +202,55 @@ export class VectorStore {
             embedding = await EmbeddingService.generateImageEmbedding(
               doc.metadata.imageData,
             );
-            console.log(`    🖼️ Generated image embedding for ${doc.metadata.filename}`);
+            console.log(
+              `    🖼️ Generated image embedding for ${doc.metadata.filename}`,
+            );
           } else {
             // Validate text content before embedding
             if (!doc.content || doc.content.trim().length === 0) {
-              console.warn(`    ⚠️ Empty content for document ${doc.metadata.filename}, skipping`);
+              console.warn(
+                `    ⚠️ Empty content for document ${doc.metadata.filename}, skipping`,
+              );
               continue;
             }
-            
+
             // The EmbeddingService will handle the text cleaning internally
             embedding = await EmbeddingService.generateTextEmbedding(
               doc.content,
             );
-            console.log(`    📝 Generated text embedding for ${doc.metadata.filename} (${doc.content.length} chars)`);
+            console.log(
+              `    📝 Generated text embedding for ${doc.metadata.filename} (${doc.content.length} chars)`,
+            );
+          }
+
+          const baseMetadata: Record<string, unknown> = {
+            content: doc.content,
+            source: doc.metadata.source,
+            page: doc.metadata.page ?? '',
+            type: doc.metadata.type,
+            filename: doc.metadata.filename,
+            section: doc.metadata.section ?? '',
+            contentHash: doc.metadata.contentHash ?? '',
+            contentType: doc.metadata.contentType,
+          };
+
+          if (doc.metadata.coordinates) {
+            baseMetadata.coordinates = doc.metadata.coordinates;
+          }
+          if (doc.metadata.imageUrl) {
+            baseMetadata.imageUrl = doc.metadata.imageUrl;
+          }
+          if (doc.metadata.tableStructure) {
+            baseMetadata.tableStructure = doc.metadata.tableStructure;
+          }
+          if (doc.metadata.originalImagePath) {
+            baseMetadata.originalImagePath = doc.metadata.originalImagePath;
           }
 
           vectors.push({
-            id: id, // Use the consistent document ID
+            id, // Use the consistent document ID
             values: embedding,
-            metadata: {
-              content: doc.content,
-              source: doc.metadata.source,
-              page: doc.metadata.page || '',
-              type: doc.metadata.type,
-              filename: doc.metadata.filename,
-              section: doc.metadata.section || '',
-              contentHash: doc.metadata.contentHash || '',
-              // Multimodal metadata
-              contentType: doc.metadata.contentType,
-              coordinates: doc.metadata.coordinates,
-              imageUrl: doc.metadata.imageUrl,
-              tableStructure: doc.metadata.tableStructure,
-              originalImagePath: doc.metadata.originalImagePath,
-            },
+            metadata: baseMetadata as PineconeRecord['metadata'],
           });
 
           console.log(
@@ -280,7 +297,7 @@ export class VectorStore {
 
   async searchSimilar(
     query: string,
-    topK: number = 20,
+    topK = 20,
     contentTypeFilter?: ContentType,
   ): Promise<SearchResult[]> {
     try {
@@ -303,7 +320,7 @@ export class VectorStore {
       return (
         searchResponse.matches?.map((match) => ({
           score: match.score || 0,
-          metadata: match.metadata as SearchResult['metadata'],
+          metadata: match.metadata as unknown as SearchResult['metadata'],
         })) || []
       );
     } catch (error) {
@@ -315,7 +332,7 @@ export class VectorStore {
   // Search using an image
   async searchSimilarByImage(
     imageBase64: string,
-    topK: number = 20,
+    topK = 20,
     contentTypeFilter?: ContentType,
   ): Promise<SearchResult[]> {
     try {
@@ -338,7 +355,7 @@ export class VectorStore {
       return (
         searchResponse.matches?.map((match) => ({
           score: match.score || 0,
-          metadata: match.metadata as SearchResult['metadata'],
+          metadata: match.metadata as unknown as SearchResult['metadata'],
         })) || []
       );
     } catch (error) {
