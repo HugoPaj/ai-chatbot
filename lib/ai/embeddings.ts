@@ -269,9 +269,81 @@ export class EmbeddingService {
     imageBase64: string,
     inputType: 'document' | 'query' = 'document',
   ): Promise<number[]> {
+    // Validate and clean base64 image data
+    const cleanImageData = this.validateAndCleanBase64Image(imageBase64);
+    
     return this.generateSingleEmbedding(
-      { type: 'image', image: imageBase64 },
+      { type: 'image', image: cleanImageData },
       inputType,
     );
+  }
+
+  // Validate and clean base64 image data for Voyage API
+  private static validateAndCleanBase64Image(imageBase64: string): string {
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      throw new Error('Image data must be a non-empty string');
+    }
+
+    // Remove any data URI prefix if present
+    let cleanBase64 = imageBase64;
+    if (imageBase64.startsWith('data:')) {
+      const base64Index = imageBase64.indexOf('base64,');
+      if (base64Index !== -1) {
+        cleanBase64 = imageBase64.substring(base64Index + 7);
+      }
+    }
+
+    // Remove any whitespace and newlines
+    cleanBase64 = cleanBase64.replace(/\s/g, '');
+
+    // Validate base64 format
+    const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+    if (!base64Regex.test(cleanBase64)) {
+      throw new Error('Invalid base64 format');
+    }
+
+    // Check if base64 string is not empty and has reasonable length
+    if (cleanBase64.length === 0) {
+      throw new Error('Empty base64 image data');
+    }
+
+    // Basic length check (base64 should be divisible by 4, with padding)
+    if (cleanBase64.length % 4 !== 0) {
+      throw new Error('Invalid base64 padding');
+    }
+
+    // Additional validation: try to decode base64 to check if it's valid
+    try {
+      const buffer = Buffer.from(cleanBase64, 'base64');
+      const estimatedFileSize = buffer.length;
+      
+      // Check if it's likely a valid image (PNG should start with specific bytes)
+      const pngHeader = Buffer.from([0x89, 0x50, 0x4E, 0x47]); // PNG header
+      const jpegHeader = Buffer.from([0xFF, 0xD8, 0xFF]); // JPEG header
+      
+      const isValidImage = buffer.subarray(0, 4).equals(pngHeader) || 
+                          buffer.subarray(0, 3).equals(jpegHeader);
+      
+      console.log(`    🔍 Base64 validation: ${cleanBase64.length} chars → ${estimatedFileSize} bytes`);
+      console.log(`    🖼️ Image format valid: ${isValidImage ? 'YES' : 'NO'}`);
+      
+      if (!isValidImage) {
+        console.warn(`    ⚠️ Warning: Base64 doesn't appear to be a valid PNG/JPEG image`);
+        console.warn(`    First 16 bytes: ${buffer.subarray(0, 16).toString('hex')}`);
+      }
+      
+      // Check for very small images that might be invalid
+      if (estimatedFileSize < 100) {
+        throw new Error(`Image too small: ${estimatedFileSize} bytes (likely corrupted)`);
+      }
+      
+    } catch (decodeError) {
+      throw new Error(`Base64 decode failed: ${decodeError instanceof Error ? decodeError.message : 'Unknown error'}`);
+    }
+
+    // Show first few characters for debugging
+    console.log(`    📝 Base64 preview: ${cleanBase64.substring(0, 50)}...`);
+    
+    return cleanBase64;
   }
 }

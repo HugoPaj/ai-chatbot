@@ -3,6 +3,8 @@ import * as pdfParse from 'pdf-parse';
 import { readFile } from 'node:fs/promises';
 import type { DocumentChunk, Coordinates, TableStructure } from '../types';
 import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
 
 // Docling service configuration
 const DOCLING_SERVICE_URL =
@@ -214,6 +216,33 @@ const processWithDocling = async (
             }
           : undefined;
 
+        // Save image chunks to disk and generate a public URL
+        let imageUrl: string | undefined;
+        if (chunk.content_type === 'image' && chunk.image_data) {
+          const imagesDir = path.join(process.cwd(), 'public', 'doc-images');
+          if (!fs.existsSync(imagesDir)) {
+            fs.mkdirSync(imagesDir, { recursive: true });
+          }
+
+          const imageHash = crypto
+            .createHash('md5')
+            .update(chunk.image_data)
+            .digest('hex')
+            .slice(0, 16);
+          const imageFileName = `${imageHash}.png`;
+          const imageFilePath = path.join(imagesDir, imageFileName);
+
+          if (!fs.existsSync(imageFilePath)) {
+            fs.writeFileSync(
+              imageFilePath,
+              Buffer.from(chunk.image_data, 'base64'),
+            );
+            console.log(`    🖼️  Saved extracted image to ${imageFilePath}`);
+          }
+
+          imageUrl = `/doc-images/${imageFileName}`;
+        }
+
         return {
           content: chunk.content,
           metadata: {
@@ -226,6 +255,7 @@ const processWithDocling = async (
             coordinates,
             tableStructure,
             imageData: chunk.image_data,
+            imageUrl,
           },
         };
       },
@@ -323,6 +353,25 @@ export const DocumentProcessor = {
       // Read image file and convert to base64
       const imageBuffer = await readFile(filePath);
       const imageBase64 = imageBuffer.toString('base64');
+
+      // Save image to disk and generate URL
+      const imagesDir = path.join(process.cwd(), 'public', 'doc-images');
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true });
+      }
+      const imageHash = crypto
+        .createHash('md5')
+        .update(imageBase64)
+        .digest('hex')
+        .slice(0, 16);
+      const imageFileName = `${imageHash}.png`;
+      const imageFilePath = path.join(imagesDir, imageFileName);
+      if (!fs.existsSync(imageFilePath)) {
+        fs.writeFileSync(imageFilePath, imageBuffer);
+        console.log(`    🖼️  Saved uploaded image to ${imageFilePath}`);
+      }
+      const imageUrl = `/doc-images/${imageFileName}`;
+
       const filename = cleanFilename(filePath, 'unknown.jpg');
 
       console.log(
@@ -339,6 +388,7 @@ export const DocumentProcessor = {
           contentType: 'image',
           imageData: imageBase64, // Store base64 data for embedding generation
           originalImagePath: filePath,
+          imageUrl,
         },
       };
     } catch (error) {

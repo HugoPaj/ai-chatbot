@@ -103,7 +103,8 @@ def setup_docling_converter():
     pipeline_options.do_ocr = True  # Enable OCR for text extraction
     pipeline_options.do_table_structure = True  # Enable table structure recognition
     pipeline_options.images_scale = 2.0  # Higher resolution for better image quality
-    pipeline_options.generate_page_images = False  # We'll extract images from elements
+    pipeline_options.generate_page_images = False  # We don't need full page images
+    pipeline_options.generate_picture_images = True  # CRUCIAL: Enable picture image extraction
     
     # Create converter with PDF-specific options
     converter = DocumentConverter(
@@ -178,15 +179,49 @@ def clean_text_content(text: str) -> str:
 def extract_image_from_picture(picture) -> Optional[str]:
     """Extract image data from a docling picture element and return as base64"""
     try:
-        # Check if picture has image attribute (PIL Image)
+        # Method 1: Check if picture has image attribute with pil_image (most common case)
         if hasattr(picture, 'image') and picture.image:
-            # Convert PIL Image to base64
+            if hasattr(picture.image, 'pil_image') and picture.image.pil_image:
+                logger.debug("Found PIL image in picture.image.pil_image")
+                buffer = io.BytesIO()
+                picture.image.pil_image.save(buffer, format='PNG')
+                img_bytes = buffer.getvalue()
+                return base64.b64encode(img_bytes).decode('utf-8')
+            
+            # Fallback: try direct image access
+            elif hasattr(picture.image, 'save'):
+                logger.debug("Found PIL image in picture.image")
+                buffer = io.BytesIO()
+                picture.image.save(buffer, format='PNG')
+                img_bytes = buffer.getvalue()
+                return base64.b64encode(img_bytes).decode('utf-8')
+        
+        # Method 2: Check if picture has direct pil_image attribute
+        if hasattr(picture, 'pil_image') and picture.pil_image:
+            logger.debug("Found PIL image in picture.pil_image")
             buffer = io.BytesIO()
-            picture.image.save(buffer, format='PNG')
+            picture.pil_image.save(buffer, format='PNG')
             img_bytes = buffer.getvalue()
             return base64.b64encode(img_bytes).decode('utf-8')
         
-        logger.debug("No image data found in picture element")
+        # Method 3: Check if picture has data attribute with pil_image
+        if hasattr(picture, 'data') and picture.data:
+            if hasattr(picture.data, 'pil_image') and picture.data.pil_image:
+                logger.debug("Found PIL image in picture.data.pil_image")
+                buffer = io.BytesIO()
+                picture.data.pil_image.save(buffer, format='PNG')
+                img_bytes = buffer.getvalue()
+                return base64.b64encode(img_bytes).decode('utf-8')
+        
+        # Debug: Log available attributes to help diagnose
+        available_attrs = [attr for attr in dir(picture) if not attr.startswith('_')]
+        logger.debug(f"No PIL image found. Available picture attributes: {available_attrs}")
+        
+        # Check if there's an image-related attribute
+        if hasattr(picture, 'image') and picture.image:
+            image_attrs = [attr for attr in dir(picture.image) if not attr.startswith('_')]
+            logger.debug(f"Available picture.image attributes: {image_attrs}")
+        
         return None
         
     except Exception as e:
@@ -290,6 +325,23 @@ def extract_chunks_from_docling_doc(doc: DoclingDocument, max_chunk_size: int = 
             for i, picture in enumerate(doc.pictures):
                 try:
                     image_data = extract_image_from_picture(picture)
+                    
+                    # Skip if no image data or if image is too small (likely corrupted)
+                    if not image_data:
+                        logger.debug(f"Skipping image {i+1}: no image data")
+                        continue
+                    
+                    # Check image size by decoding base64
+                    try:
+                        import base64
+                        decoded_bytes = base64.b64decode(image_data)
+                        if len(decoded_bytes) < 500:  # Skip very small images (< 500 bytes)
+                            logger.debug(f"Skipping image {i+1}: too small ({len(decoded_bytes)} bytes)")
+                            continue
+                    except Exception as decode_error:
+                        logger.debug(f"Skipping image {i+1}: invalid base64 data - {decode_error}")
+                        continue
+                    
                     page_no = 1  # Default page
                     
                     # Try to get page number from provenance

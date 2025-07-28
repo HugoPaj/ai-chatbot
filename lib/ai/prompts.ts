@@ -5,10 +5,16 @@ import type { SearchResult } from '../types';
 export const formatDocumentContext = (similarDocs: SearchResult[]) => {
   return similarDocs
     .filter((doc) => doc.score > 0.7) // Filter by relevance score
-    .map(
-      (doc) =>
-        `Source: ${doc.metadata.filename} (Page ${doc.metadata.page || 'N/A'})\n${doc.metadata.content}`,
-    )
+    .map((doc) => {
+      const header = `Source: ${doc.metadata.filename} (Page ${doc.metadata.page || 'N/A'})`;
+
+      if (doc.metadata.contentType === 'image' && doc.metadata.imageUrl) {
+        // Include the image itself when available
+        return `${header}\n![${doc.metadata.filename}](${doc.metadata.imageUrl})`;
+      }
+
+      return `${header}\n${doc.metadata.content}`;
+    })
     .join('\n\n---\n\n');
 };
 
