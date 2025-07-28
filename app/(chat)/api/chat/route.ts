@@ -186,11 +186,36 @@ export async function POST(request: Request) {
                 score: doc.score.toFixed(3),
                 file: doc.metadata.filename,
                 page: doc.metadata.page ?? 'N/A',
+                type: doc.metadata.contentType,
               })),
             );
 
+            // Debug: Check for images in results
+            const imageResults = similarDocs.filter(doc => doc.metadata.contentType === 'image');
+            const textResults = similarDocs.filter(doc => doc.metadata.contentType === 'text');
+            console.log(`[VectorStore] Content breakdown: ${textResults.length} text, ${imageResults.length} images`);
+            
+            if (imageResults.length > 0) {
+              console.log('[VectorStore] Image results:',
+                imageResults.slice(0, 3).map((doc) => ({
+                  score: doc.score.toFixed(3),
+                  file: doc.metadata.filename,
+                  page: doc.metadata.page ?? 'N/A',
+                  hasImageUrl: !!doc.metadata.imageUrl,
+                  imageUrl: doc.metadata.imageUrl,
+                }))
+              );
+            }
+
             // Create context from retrieved documents
             documentContext = formatDocumentContext(similarDocs);
+            
+            // Debug: Log if images are included in context
+            if (documentContext.includes('![')) {
+              console.log('[VectorStore] ✅ Images included in context');
+            } else {
+              console.log('[VectorStore] ❌ No images in final context');
+            }
 
             // Extract unique source filenames
             documentSources = Array.from(

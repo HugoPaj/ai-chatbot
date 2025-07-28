@@ -4,7 +4,13 @@ import type { SearchResult } from '../types';
 
 export const formatDocumentContext = (similarDocs: SearchResult[]) => {
   return similarDocs
-    .filter((doc) => doc.score > 0.5) // Filter by relevance score
+    .filter((doc) => {
+      // Use lower threshold for images since they might have lower similarity scores with text queries
+      if (doc.metadata.contentType === 'image') {
+        return doc.score > 0.2;
+      }
+      return doc.score > 0.5;
+    })
     .map((doc) => {
       const header = `Source: ${doc.metadata.filename} (Page ${doc.metadata.page || 'N/A'})`;
 

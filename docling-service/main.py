@@ -264,7 +264,7 @@ def extract_table_from_element(element) -> Optional[dict]:
         logger.warning(f"Error extracting table structure: {e}")
         return None
 
-def extract_chunks_from_docling_doc(doc: DoclingDocument, max_chunk_size: int = 1000) -> List[ProcessedChunk]:
+def extract_chunks_from_docling_doc(doc: DoclingDocument, filename: str = '', max_chunk_size: int = 1000) -> List[ProcessedChunk]:
     """Extract structured chunks from a Docling document using recommended methods"""
     chunks = []
     
@@ -364,9 +364,35 @@ def extract_chunks_from_docling_doc(doc: DoclingDocument, max_chunk_size: int = 
                                 )
                                 break
                     
-                    content = f"Image {i+1} extracted from page {page_no}"
+                    # Create more descriptive content for better searchability
+                    document_subject = ''
+                    if filename:
+                        # Extract subject matter from filename
+                        filename_lower = filename.lower()
+                        if 'termodinamica' in filename_lower or 'thermodynamics' in filename_lower:
+                            document_subject = 'thermodynamics termodinamica'
+                        elif 'mecanica' in filename_lower or 'mechanics' in filename_lower:
+                            document_subject = 'mechanics mecanica'
+                        elif 'fluidos' in filename_lower or 'fluids' in filename_lower:
+                            document_subject = 'fluids fluidos'
+                        elif 'calor' in filename_lower or 'heat' in filename_lower:
+                            document_subject = 'heat transfer calor'
+                    
+                    # Generate comprehensive content description
+                    content_parts = [
+                        f"Diagram figure image from page {page_no}",
+                        f"Visual content from {filename}",
+                        "Engineering technical diagram chart graph illustration",
+                        document_subject,
+                        "Scientific educational academic content",
+                        f"Page {page_no} visual material"
+                    ]
+                    
+                    # Add caption if available
                     if hasattr(picture, 'caption') and picture.caption:
-                        content = f"{content}. Caption: {picture.caption}"
+                        content_parts.append(f"Caption: {picture.caption}")
+                    
+                    content = ' '.join(filter(None, content_parts))
                     
                     chunks.append(ProcessedChunk(
                         content=content,
@@ -493,7 +519,7 @@ async def process_document(file: UploadFile = File(...)):
         result = converter.convert(temp_path)
         
         # Extract structured chunks using simplified method
-        chunks = extract_chunks_from_docling_doc(result.document)
+        chunks = extract_chunks_from_docling_doc(result.document, file.filename or 'document')
         
         # Get total pages
         total_pages = len(result.document.pages) if hasattr(result.document, 'pages') and result.document.pages else 1
