@@ -9,8 +9,9 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
       const header = `Source: ${doc.metadata.filename} (Page ${doc.metadata.page || 'N/A'})`;
 
       if (doc.metadata.contentType === 'image' && doc.metadata.imageUrl) {
-        // Include the image itself when available
-        return `${header}\n![${doc.metadata.filename}](${doc.metadata.imageUrl})`;
+        // Include the image itself when available with description
+        const imageDescription = doc.content || 'Image from document';
+        return `${header}\n${imageDescription}\n\n![${doc.metadata.filename} - ${imageDescription}](${doc.metadata.imageUrl})`;
       }
 
       return `${header}\n${doc.metadata.content}`;
@@ -68,6 +69,9 @@ When documents are provided:
 - Format the responses with headers, subheaders, etc. in markdown to ensure it is easy to read and understand
 - Return all equations in LaTeX format no matter what, Inline equations are denoted with single dollar signs: $equation$
   Display equations are denoted with double dollar signs: $$equation$$
+- When images are included in the context, they will appear as markdown image tags. Display these images inline with your response and refer to them when explaining concepts
+- Describe and reference visual elements (diagrams, charts, graphs, etc.) found in images to enhance your explanations
+- Use images to support your textual explanations and make them more comprehensive
 - Respond in the same language as the user has asked the question in
 - Make sure to remain as concise as possible, if you checked a document and don't find the relevant information there but find it in another document, don't mention the first document in your response
  `;

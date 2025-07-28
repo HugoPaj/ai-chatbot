@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { CodeBlock } from './code-block';
+import Image from 'next/image';
 import 'katex/dist/katex.min.css';
 
 const components: Partial<Components> = {
@@ -92,6 +93,28 @@ const components: Partial<Components> = {
       <h6 className="text-sm font-semibold mt-6 mb-2" {...props}>
         {children}
       </h6>
+    );
+  },
+  img: ({ node, alt, src, ...props }) => {
+    if (!src) return null;
+    
+    return (
+      <div className="my-4 flex flex-col items-center">
+        <div className="relative max-w-full border rounded-lg overflow-hidden shadow-sm">
+          <img
+            src={src}
+            alt={alt || 'Document image'}
+            className="max-w-full h-auto object-contain"
+            style={{ maxHeight: '400px' }}
+            {...props}
+          />
+        </div>
+        {alt && (
+          <div className="text-sm text-gray-600 mt-2 text-center max-w-full break-words">
+            {alt}
+          </div>
+        )}
+      </div>
     );
   },
 };
