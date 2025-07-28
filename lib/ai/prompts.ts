@@ -4,7 +4,7 @@ import type { SearchResult } from '../types';
 
 export const formatDocumentContext = (similarDocs: SearchResult[]) => {
   return similarDocs
-    .filter((doc) => doc.score > 0.7) // Filter by relevance score
+    .filter((doc) => doc.score > 0.5) // Filter by relevance score
     .map((doc) => {
       const header = `Source: ${doc.metadata.filename} (Page ${doc.metadata.page || 'N/A'})`;
 

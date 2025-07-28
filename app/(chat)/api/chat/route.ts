@@ -196,7 +196,7 @@ export async function POST(request: Request) {
             documentSources = Array.from(
               new Set(
                 similarDocs
-                  .filter((doc) => doc.score > 0.7)
+                  .filter((doc) => doc.score > 0.5)
                   .map((doc) => doc.metadata.filename),
               ),
             );

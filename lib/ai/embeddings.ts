@@ -99,11 +99,14 @@ export class EmbeddingService {
           };
         }
 
+        // Voyage API might expect data URI format
+        const imageData = item.image.startsWith('data:') ? item.image : `data:image/png;base64,${item.image}`;
+        
         return {
           content: [
             {
               type: 'image_base64',
-              image_base64: item.image,
+              image_base64: imageData,
             },
           ],
         };
