@@ -5,7 +5,8 @@ import type { DocumentChunk, Coordinates, TableStructure } from '../types';
 import fs from 'node:fs';
 
 // Docling service configuration
-const DOCLING_SERVICE_URL = process.env.DOCLING_SERVICE_URL || 'http://localhost:8001';
+const DOCLING_SERVICE_URL =
+  process.env.DOCLING_SERVICE_URL || 'http://localhost:8001';
 
 // Docling service types
 interface DoclingChunk {
@@ -103,13 +104,20 @@ const chunkText = (
 // Helper function to check if Docling service is available
 const isDoclingServiceAvailable = async (): Promise<boolean> => {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     const response = await fetch(`${DOCLING_SERVICE_URL}/health`, {
       method: 'GET',
-      timeout: 5000,
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
     return response.ok;
   } catch (error) {
-    console.log(`    ℹ️  Docling service not available at ${DOCLING_SERVICE_URL}`);
+    console.log(
+      `    ℹ️  Docling service not available at ${DOCLING_SERVICE_URL}`,
+    );
     return false;
   }
 };
@@ -120,27 +128,33 @@ const processWithDocling = async (
   contentHash?: string,
 ): Promise<DocumentChunk[]> => {
   try {
-    console.log(`    🚀 Processing with Docling service for images, text, and tables...`);
-    
+    console.log(
+      `    🚀 Processing with Docling service for images, text, and tables...`,
+    );
+
     // Read file and create FormData
     const fileBuffer = await readFile(filePath);
     const formData = new FormData();
-    
+
     // Determine file type based on extension
     const fileExtension = filePath.split('.').pop()?.toLowerCase() || 'pdf';
     const mimeTypes: Record<string, string> = {
-      'pdf': 'application/pdf',
-      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'html': 'text/html',
+      pdf: 'application/pdf',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      html: 'text/html',
     };
-    
+
     const mimeType = mimeTypes[fileExtension] || 'application/pdf';
-    
+
     // Create a File object from buffer
-    const file = new File([fileBuffer], filePath.split('/').pop() || `document.${fileExtension}`, {
-      type: mimeType,
-    });
+    const file = new File(
+      [fileBuffer],
+      filePath.split('/').pop() || `document.${fileExtension}`,
+      {
+        type: mimeType,
+      },
+    );
     formData.append('file', file);
 
     // Send to Docling service
@@ -150,7 +164,9 @@ const processWithDocling = async (
     });
 
     if (!response.ok) {
-      throw new Error(`Docling service error: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `Docling service error: ${response.status} ${response.statusText}`,
+      );
     }
 
     const doclingResult: DoclingResponse = await response.json();
@@ -159,45 +175,61 @@ const processWithDocling = async (
       throw new Error(`Docling processing failed: ${doclingResult.error}`);
     }
 
-    console.log(`    ✅ Docling processed ${doclingResult.chunks.length} chunks in ${doclingResult.processing_time.toFixed(2)}s`);
-    
+    console.log(
+      `    ✅ Docling processed ${doclingResult.chunks.length} chunks in ${doclingResult.processing_time.toFixed(2)}s`,
+    );
+
     // Log breakdown by content type
-    const textChunks = doclingResult.chunks.filter(c => c.content_type === 'text').length;
-    const imageChunks = doclingResult.chunks.filter(c => c.content_type === 'image').length;
-    const tableChunks = doclingResult.chunks.filter(c => c.content_type === 'table').length;
-    console.log(`    📊 Content breakdown: ${textChunks} text, ${imageChunks} images, ${tableChunks} tables`);
+    const textChunks = doclingResult.chunks.filter(
+      (c) => c.content_type === 'text',
+    ).length;
+    const imageChunks = doclingResult.chunks.filter(
+      (c) => c.content_type === 'image',
+    ).length;
+    const tableChunks = doclingResult.chunks.filter(
+      (c) => c.content_type === 'table',
+    ).length;
+    console.log(
+      `    📊 Content breakdown: ${textChunks} text, ${imageChunks} images, ${tableChunks} tables`,
+    );
 
     // Convert Docling chunks to DocumentChunk format
     const filename = cleanFilename(filePath, `unknown.${fileExtension}`);
-    const documentChunks: DocumentChunk[] = doclingResult.chunks.map((chunk, index) => {
-      const coordinates: Coordinates | undefined = chunk.coordinates ? {
-        x: chunk.coordinates.x,
-        y: chunk.coordinates.y,
-        width: chunk.coordinates.width,
-        height: chunk.coordinates.height,
-      } : undefined;
+    const documentChunks: DocumentChunk[] = doclingResult.chunks.map(
+      (chunk, index) => {
+        const coordinates: Coordinates | undefined = chunk.coordinates
+          ? {
+              x: chunk.coordinates.x,
+              y: chunk.coordinates.y,
+              width: chunk.coordinates.width,
+              height: chunk.coordinates.height,
+            }
+          : undefined;
 
-      const tableStructure: TableStructure | undefined = chunk.table_structure ? {
-        headers: chunk.table_structure.headers,
-        rows: chunk.table_structure.rows,
-        caption: chunk.table_structure.caption,
-      } : undefined;
+        const tableStructure: TableStructure | undefined = chunk.table_structure
+          ? {
+              headers: chunk.table_structure.headers,
+              rows: chunk.table_structure.rows,
+              caption: chunk.table_structure.caption,
+            }
+          : undefined;
 
-      return {
-        content: chunk.content,
-        metadata: {
-          source: filePath,
-          page: chunk.page || 1,
-          type: 'pdf',
-          filename,
-          contentHash: contentHash || '',
-          contentType: chunk.content_type,
-          coordinates,
-          tableStructure,
-          imageData: chunk.image_data,
-        },
-      };
-    });
+        return {
+          content: chunk.content,
+          metadata: {
+            source: filePath,
+            page: chunk.page || 1,
+            type: 'pdf',
+            filename,
+            contentHash: contentHash || '',
+            contentType: chunk.content_type,
+            coordinates,
+            tableStructure,
+            imageData: chunk.image_data,
+          },
+        };
+      },
+    );
 
     return documentChunks;
   } catch (error) {
@@ -214,7 +246,7 @@ export const DocumentProcessor = {
   ): Promise<DocumentChunk[]> => {
     try {
       console.log(`    📖 Processing document: ${filePath}`);
-      
+
       // Check if file exists before attempting to read it
       if (!fs.existsSync(filePath)) {
         throw new Error(`Document file not found: ${filePath}`);
@@ -222,24 +254,32 @@ export const DocumentProcessor = {
 
       // Try enhanced processing with Docling service first
       const doclingAvailable = await isDoclingServiceAvailable();
-      
+
       if (doclingAvailable) {
         try {
           return await processWithDocling(filePath, contentHash);
         } catch (doclingError) {
-          console.warn(`    ⚠️  Docling processing failed, falling back to basic PDF processing`);
+          console.warn(
+            `    ⚠️  Docling processing failed, falling back to basic PDF processing`,
+          );
           console.warn(`    Error: ${doclingError}`);
         }
       } else {
-        console.log(`    ℹ️  Docling service not available, using basic PDF processing`);
+        console.log(
+          `    ℹ️  Docling service not available, using basic PDF processing`,
+        );
       }
 
       // Fallback to basic PDF processing (text only)
-      console.log(`    📖 Using fallback PDF text extraction (no images/tables)`);
+      console.log(
+        `    📖 Using fallback PDF text extraction (no images/tables)`,
+      );
       const dataBuffer = await readFile(filePath);
       const data = await pdfParse.default(dataBuffer);
 
-      console.log(`    📝 Extracted ${data.text.length} characters from ${data.numpages} pages`);
+      console.log(
+        `    📝 Extracted ${data.text.length} characters from ${data.numpages} pages`,
+      );
 
       if (!data.text || data.text.trim().length === 0) {
         console.warn(`    ⚠️  No text content found in PDF`);
@@ -274,7 +314,7 @@ export const DocumentProcessor = {
   ): Promise<DocumentChunk> => {
     try {
       console.log(`    🖼️  Processing image file: ${filePath}`);
-      
+
       // Check if file exists
       if (!fs.existsSync(filePath)) {
         throw new Error(`Image file not found: ${filePath}`);
@@ -285,7 +325,9 @@ export const DocumentProcessor = {
       const imageBase64 = imageBuffer.toString('base64');
       const filename = cleanFilename(filePath, 'unknown.jpg');
 
-      console.log(`    📸 Converted image to base64 (${imageBase64.length} chars)`);
+      console.log(
+        `    📸 Converted image to base64 (${imageBase64.length} chars)`,
+      );
 
       return {
         content: `Image: ${filename}. This image contains visual content that can be searched and analyzed using multimodal AI.`,

@@ -154,6 +154,11 @@ export async function POST(request: Request) {
         // Initialize the vector store for document search
         const vectorStore = new VectorStore();
 
+        // Ensure the Pinecone index exists and is correctly configured before searching
+        // This is fast when the index already exists but guarantees that searchSimilar()
+        // will not fail due to a missing index on fresh deployments.
+        await vectorStore.initialize();
+
         // Search for relevant documents based on the user's message
         const userMessageText =
           message.parts.find((part) => part.type === 'text')?.text || '';
@@ -161,12 +166,29 @@ export async function POST(request: Request) {
         let documentSources: string[] = [];
 
         try {
+          console.log(
+            '[VectorStore] Searching for documents similar to user query…',
+          );
           const similarDocs = await vectorStore.searchSimilar(
             userMessageText,
             20,
           );
 
+          console.log(
+            `[VectorStore] Retrieved ${similarDocs.length} candidate document(s)`,
+          );
+
           if (similarDocs.length > 0) {
+            // Optional: log top results with score and filename for visibility
+            console.log(
+              '[VectorStore] Top matches:',
+              similarDocs.slice(0, 5).map((doc) => ({
+                score: doc.score.toFixed(3),
+                file: doc.metadata.filename,
+                page: doc.metadata.page ?? 'N/A',
+              })),
+            );
+
             // Create context from retrieved documents
             documentContext = formatDocumentContext(similarDocs);
 
@@ -178,6 +200,8 @@ export async function POST(request: Request) {
                   .map((doc) => doc.metadata.filename),
               ),
             );
+          } else {
+            console.log('[VectorStore] No relevant documents found for query.');
           }
         } catch (error) {
           console.error('Error retrieving similar documents:', error);

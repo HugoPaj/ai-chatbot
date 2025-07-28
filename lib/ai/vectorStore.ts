@@ -98,16 +98,20 @@ export class VectorStore {
    * This ensures the same document gets the same ID across runs
    */
   private generateDocumentId(doc: DocumentChunk): string {
-    // If contentHash is available, use it as the primary identifier
-    if (doc.metadata.contentHash) {
-      // Combine contentHash with page/section information for multi-page documents
-      const idSource = `${doc.metadata.contentHash}|${doc.metadata.page || ''}|${doc.metadata.section || ''}`;
-      return crypto.createHash('md5').update(idSource).digest('hex');
-    }
-
-    // Fallback to previous method for backward compatibility
-    // Note: doc.metadata.filename already has UUID prefix removed by DocumentProcessor
-    const idSource = `${doc.metadata.source}|${doc.metadata.filename}|${doc.metadata.page || ''}|${doc.metadata.section || ''}`;
+    const base = doc.metadata.contentHash ?? doc.metadata.source;
+    const chunkHash = crypto
+      .createHash('md5')
+      .update(
+        doc.content?.slice(0, 256) || // text chunks
+          JSON.stringify(
+            doc.metadata.coordinates ?? // images / tables
+              doc.metadata.section ??
+              '',
+          ),
+      )
+      .digest('hex')
+      .slice(0, 8); // short & stable
+    const idSource = `${base}|${doc.metadata.page || ''}|${doc.metadata.section || ''}|${chunkHash}`;
     return crypto.createHash('md5').update(idSource).digest('hex');
   }
 
