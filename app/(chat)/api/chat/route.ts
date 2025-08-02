@@ -5,6 +5,7 @@ import {
   smoothStream,
   streamText,
 } from 'ai';
+import type { SearchResult } from '@/lib/types';
 import { auth, type UserType } from '@/app/(auth)/auth';
 import {
   type RequestHints,
@@ -169,10 +170,58 @@ export async function POST(request: Request) {
           console.log(
             '[VectorStore] Searching for documents similar to user query…',
           );
-          const similarDocs = await vectorStore.searchSimilar(
-            userMessageText,
-            20,
-          );
+
+          // Attempt an image-based similarity search first if the user provided image attachments
+          let similarDocs: SearchResult[] = [];
+
+          if (
+            message.experimental_attachments &&
+            message.experimental_attachments.length > 0
+          ) {
+            const firstImage = message.experimental_attachments.find((att) =>
+              att.contentType.startsWith('image/'),
+            );
+
+            if (firstImage) {
+              try {
+                console.log(
+                  `[VectorStore] Detected image attachment (${firstImage.name}). Performing image similarity search…`,
+                );
+
+                const imageResponse = await fetch(firstImage.url);
+
+                if (!imageResponse.ok) {
+                  throw new Error(
+                    `Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`,
+                  );
+                }
+
+                const imageBuffer = Buffer.from(
+                  await imageResponse.arrayBuffer(),
+                );
+                const imageBase64 = imageBuffer.toString('base64');
+
+                similarDocs = await vectorStore.searchSimilarByImage(
+                  imageBase64,
+                  20,
+                );
+
+                console.log(
+                  `[VectorStore] Retrieved ${similarDocs.length} document(s) from image search`,
+                );
+              } catch (error) {
+                console.error(
+                  '[VectorStore] Image similarity search failed, falling back to text search:',
+                  error,
+                );
+              }
+            }
+          }
+
+          // Fall back to text search if no results were returned from the image search
+          if (similarDocs.length === 0) {
+            similarDocs = await vectorStore.searchSimilar(userMessageText, 20);
+          }
 
           console.log(
             `[VectorStore] Retrieved ${similarDocs.length} candidate document(s)`,
@@ -191,25 +240,32 @@ export async function POST(request: Request) {
             );
 
             // Debug: Check for images in results
-            const imageResults = similarDocs.filter(doc => doc.metadata.contentType === 'image');
-            const textResults = similarDocs.filter(doc => doc.metadata.contentType === 'text');
-            console.log(`[VectorStore] Content breakdown: ${textResults.length} text, ${imageResults.length} images`);
-            
+            const imageResults = similarDocs.filter(
+              (doc) => doc.metadata.contentType === 'image',
+            );
+            const textResults = similarDocs.filter(
+              (doc) => doc.metadata.contentType === 'text',
+            );
+            console.log(
+              `[VectorStore] Content breakdown: ${textResults.length} text, ${imageResults.length} images`,
+            );
+
             if (imageResults.length > 0) {
-              console.log('[VectorStore] Image results:',
+              console.log(
+                '[VectorStore] Image results:',
                 imageResults.slice(0, 3).map((doc) => ({
                   score: doc.score.toFixed(3),
                   file: doc.metadata.filename,
                   page: doc.metadata.page ?? 'N/A',
                   hasImageUrl: !!doc.metadata.imageUrl,
                   imageUrl: doc.metadata.imageUrl,
-                }))
+                })),
               );
             }
 
             // Create context from retrieved documents
             documentContext = formatDocumentContext(similarDocs);
-            
+
             // Debug: Log if images are included in context
             if (documentContext.includes('![')) {
               console.log('[VectorStore] ✅ Images included in context');

@@ -8,7 +8,7 @@ export class VectorStore {
   private pinecone: Pinecone;
   private indexName;
 
-  constructor(indexName = 'multimodal-v1') {
+  constructor(indexName = 'multimodal-v2') {
     if (!process.env.PINECONE_API_KEY) {
       throw new Error('PINECONE_API_KEY is not configured');
     }
