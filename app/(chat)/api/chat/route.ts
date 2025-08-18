@@ -203,7 +203,7 @@ export async function POST(request: Request) {
 
                 similarDocs = await vectorStore.searchSimilarByImage(
                   imageBase64,
-                  20,
+                  100,
                 );
 
                 console.log(
@@ -220,7 +220,7 @@ export async function POST(request: Request) {
 
           // Fall back to text search if no results were returned from the image search
           if (similarDocs.length === 0) {
-            similarDocs = await vectorStore.searchSimilar(userMessageText, 20);
+            similarDocs = await vectorStore.searchSimilar(userMessageText, 100);
           }
 
           console.log(
@@ -277,7 +277,7 @@ export async function POST(request: Request) {
             documentSources = Array.from(
               new Set(
                 similarDocs
-                  .filter((doc) => doc.score > 0.5)
+                  .filter((doc) => doc.score > 0.3)
                   .map((doc) => doc.metadata.filename),
               ),
             );
@@ -390,6 +390,15 @@ export async function POST(request: Request) {
     if (error instanceof ChatSDKError) {
       return error.toResponse();
     }
+
+    console.error('Unexpected error in chat route:', error);
+    return Response.json(
+      {
+        code: '',
+        message: 'Something went wrong. Please try again later.',
+      },
+      { status: 500 },
+    );
   }
 }
 

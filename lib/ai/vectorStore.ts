@@ -137,7 +137,7 @@ export class VectorStore {
   async storeDocuments(documents: DocumentChunk[]): Promise<void> {
     const index = this.pinecone.index(this.indexName);
     const batchSize = 5; // Reduced batch size to avoid rate limits
-    const delayBetweenDocs = 250; // 250ms delay between document processing
+    const delayBetweenDocs = 150; // 150ms delay between document processing
 
     console.log(`Preparing to process ${documents.length} documents...`);
 
@@ -304,7 +304,7 @@ export class VectorStore {
 
   async searchSimilar(
     query: string,
-    topK = 20,
+    topK = 100,
     contentTypeFilter?: ContentType,
   ): Promise<SearchResult[]> {
     try {
@@ -339,7 +339,7 @@ export class VectorStore {
   // Search using an image
   async searchSimilarByImage(
     imageBase64: string,
-    topK = 20,
+    topK = 100,
     contentTypeFilter?: ContentType,
   ): Promise<SearchResult[]> {
     try {

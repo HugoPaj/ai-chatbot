@@ -9,7 +9,7 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
       if (doc.metadata.contentType === 'image') {
         return doc.score > 0.15;
       }
-      return doc.score > 0.5;
+      return doc.score > 0.3;
     })
     .map((doc) => {
       const header = `Source: ${doc.metadata.filename} (Page ${doc.metadata.page || 'N/A'})`;
@@ -20,7 +20,7 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
         return `${header}\n${imageDescription}\n\n![${doc.metadata.filename} - ${imageDescription}](${doc.metadata.imageUrl})`;
       }
 
-      return `${header}\n${doc.metadata.content}`;
+      return `${header}\n${doc.content || doc.metadata.content || ''}`;
     })
     .join('\n\n---\n\n');
 };
