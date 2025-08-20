@@ -3,7 +3,10 @@
     "allow": [
       "WebFetch(domain:python.langchain.com)",
       "Bash(npx pnpm install:*)",
-      "Bash(pnpm install:*)"
+      "Bash(pnpm install:*)",
+      "WebFetch(domain:docs.cohere.com)",
+      "WebSearch",
+      "Bash(pnpm add:*)"
     ],
     "deny": []
   }

@@ -1,14 +1,14 @@
 import { Pinecone } from '@pinecone-database/pinecone';
 import type { PineconeRecord, Index } from '@pinecone-database/pinecone';
 import type { DocumentChunk, SearchResult, ContentType } from '../types';
-import { EmbeddingService } from './embeddings';
+import { CohereEmbeddingService } from './cohereEmbeddings';
 import crypto from 'node:crypto';
 
 export class VectorStore {
   private pinecone: Pinecone;
   private indexName;
 
-  constructor(indexName = 'multimodal-v2') {
+  constructor(indexName = 'cohere-v4') {
     if (!process.env.PINECONE_API_KEY) {
       throw new Error('PINECONE_API_KEY is not configured');
     }
@@ -25,7 +25,7 @@ export class VectorStore {
    */
   async initialize(): Promise<void> {
     try {
-      const REQUIRED_DIMENSION = 1024; // voyage-multimodal-3 uses 1408-dimensional embeddings
+      const REQUIRED_DIMENSION = 1536; // cohere embed-v4.0 uses 1536-dimensional embeddings
 
       // Check if index exists
       const indexes = await this.pinecone.listIndexes();
@@ -71,7 +71,7 @@ export class VectorStore {
       console.log(`Creating index '${this.indexName}'...`);
       await this.pinecone.createIndex({
         name: this.indexName,
-        dimension: REQUIRED_DIMENSION, // voyage-multimodal-3 uses 1408-dimensional embeddings
+        dimension: REQUIRED_DIMENSION, // cohere embed-v4.0 uses 1536-dimensional embeddings
         metric: 'cosine',
         spec: {
           serverless: {
@@ -203,8 +203,9 @@ export class VectorStore {
           let embedding: number[];
 
           if (doc.metadata.contentType === 'image' && doc.metadata.imageData) {
-            embedding = await EmbeddingService.generateImageEmbedding(
+            embedding = await CohereEmbeddingService.generateImageEmbedding(
               doc.metadata.imageData,
+              'search_document',
             );
             console.log(
               `    🖼️ Generated image embedding for ${doc.metadata.filename}`,
@@ -218,9 +219,10 @@ export class VectorStore {
               continue;
             }
 
-            // The EmbeddingService will handle the text cleaning internally
-            embedding = await EmbeddingService.generateTextEmbedding(
+            // The CohereEmbeddingService will handle the text cleaning internally
+            embedding = await CohereEmbeddingService.generateTextEmbedding(
               doc.content,
+              'search_document',
             );
             console.log(
               `    📝 Generated text embedding for ${doc.metadata.filename} (${doc.content.length} chars)`,
@@ -308,9 +310,9 @@ export class VectorStore {
     contentTypeFilter?: ContentType,
   ): Promise<SearchResult[]> {
     try {
-      const queryEmbedding = await EmbeddingService.generateTextEmbedding(
+      const queryEmbedding = await CohereEmbeddingService.generateTextEmbedding(
         query,
-        'query',
+        'search_query',
       );
       const index = this.pinecone.index(this.indexName);
 
@@ -343,10 +345,11 @@ export class VectorStore {
     contentTypeFilter?: ContentType,
   ): Promise<SearchResult[]> {
     try {
-      const queryEmbedding = await EmbeddingService.generateImageEmbedding(
-        imageBase64,
-        'query',
-      );
+      const queryEmbedding =
+        await CohereEmbeddingService.generateImageEmbedding(
+          imageBase64,
+          'search_query',
+        );
       const index = this.pinecone.index(this.indexName);
 
       const searchResponse = await index.query({

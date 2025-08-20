@@ -1,5 +1,4 @@
 // src/lib/documentProcessor.ts
-import * as pdfParse from 'pdf-parse';
 import { readFile } from 'node:fs/promises';
 import type { DocumentChunk, Coordinates, TableStructure } from '../types';
 import fs from 'node:fs';
@@ -305,7 +304,10 @@ export const DocumentProcessor = {
         `    📖 Using fallback PDF text extraction (no images/tables)`,
       );
       const dataBuffer = await readFile(filePath);
-      const data = await pdfParse.default(dataBuffer);
+      
+      // Dynamic import to avoid test file execution issues at module load time
+      const { default: pdfParseModule } = await import('pdf-parse');
+      const data = await pdfParseModule(dataBuffer);
 
       console.log(
         `    📝 Extracted ${data.text.length} characters from ${data.numpages} pages`,
