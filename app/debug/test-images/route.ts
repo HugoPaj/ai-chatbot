@@ -17,7 +17,7 @@ export async function GET() {
       'imagen',
       'grafico',
       'formula',
-      'ecuacion'
+      'ecuacion',
     ];
 
     const results = [];
@@ -25,66 +25,75 @@ export async function GET() {
     for (const query of testQueries) {
       console.log(`Testing query: "${query}"`);
       const searchResults = await vectorStore.searchSimilar(query, 20);
-      
-      const imageResults = searchResults.filter(doc => doc.metadata.contentType === 'image');
-      const textResults = searchResults.filter(doc => doc.metadata.contentType === 'text');
-      
+
+      const imageResults = searchResults.filter(
+        (doc) => doc.metadata.contentType === 'image',
+      );
+      const textResults = searchResults.filter(
+        (doc) => doc.metadata.contentType === 'text',
+      );
+
       results.push({
         query,
         totalResults: searchResults.length,
-        imageCount: imageResults.length,  
+        imageCount: imageResults.length,
         textCount: textResults.length,
-        topImages: imageResults.slice(0, 3).map(doc => ({
+        topImages: imageResults.slice(0, 3).map((doc) => ({
           score: doc.score,
           filename: doc.metadata.filename,
           page: doc.metadata.page,
           content: doc.content,
           imageUrl: doc.metadata.imageUrl,
-          hasImageData: !!doc.metadata.imageData
+          hasImageData: !!doc.metadata.imageData,
         })),
-        topTexts: textResults.slice(0, 2).map(doc => ({
+        topTexts: textResults.slice(0, 2).map((doc) => ({
           score: doc.score,
           filename: doc.metadata.filename,
           page: doc.metadata.page,
-          content: doc.content?.substring(0, 150) + '...'
+          content: doc.content?.substring(0, 150) + '...',
         })),
-        formattedContext: imageResults.length > 0 ? formatDocumentContext(searchResults) : null
+        formattedContext:
+          imageResults.length > 0 ? formatDocumentContext(searchResults) : null,
       });
     }
 
     // Test with a specific thermodynamics query
     const thermoQuery = 'diagrama termodinámico ciclo';
     const thermoResults = await vectorStore.searchSimilar(thermoQuery, 30);
-    const thermoImages = thermoResults.filter(doc => doc.metadata.contentType === 'image');
-    
+    const thermoImages = thermoResults.filter(
+      (doc) => doc.metadata.contentType === 'image',
+    );
+
     return Response.json({
       testResults: results,
       specificThermoTest: {
         query: thermoQuery,
         totalResults: thermoResults.length,
         imageCount: thermoImages.length,
-        images: thermoImages.map(doc => ({
+        images: thermoImages.map((doc) => ({
           score: doc.score,
           filename: doc.metadata.filename,
           page: doc.metadata.page,
           content: doc.content,
-          imageUrl: doc.metadata.imageUrl
+          imageUrl: doc.metadata.imageUrl,
         })),
-        formattedContext: formatDocumentContext(thermoResults)
+        formattedContext: formatDocumentContext(thermoResults),
       },
       summary: {
         totalQueriesTested: testQueries.length,
-        queriesWithImages: results.filter(r => r.imageCount > 0).length,
+        queriesWithImages: results.filter((r) => r.imageCount > 0).length,
         averageImageScores: results
-          .flatMap(r => r.topImages)
-          .map(img => img.score)
-      }
+          .flatMap((r) => r.topImages)
+          .map((img) => img.score),
+      },
     });
-
   } catch (error: any) {
-    return Response.json({
-      error: error.message,
-      stack: error.stack
-    }, { status: 500 });
+    return Response.json(
+      {
+        error: error.message,
+        stack: error.stack,
+      },
+      { status: 500 },
+    );
   }
 }

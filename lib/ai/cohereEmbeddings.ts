@@ -94,16 +94,17 @@ export class CohereEmbeddingService {
 
       // Process text items if any
       if (textItems.length > 0) {
-        console.log(
-          `    📝 Processing ${textItems.length} text input(s)...`,
-        );
+        console.log(`    📝 Processing ${textItems.length} text input(s)...`);
 
         // For simple text inputs, use the 'texts' parameter (simpler API)
-        const texts = textItems.map((item) => 
-          (item as { type: 'text'; text: string }).text
+        const texts = textItems.map(
+          (item) => (item as { type: 'text'; text: string }).text,
         );
 
-        console.log(`    🔍 Texts to embed:`, texts.slice(0, 1).map(t => `"${t.substring(0, 100)}..."`));
+        console.log(
+          `    🔍 Texts to embed:`,
+          texts.slice(0, 1).map((t) => `"${t.substring(0, 100)}..."`),
+        );
 
         const textResponse = await client.embed({
           model: 'embed-v4.0',
@@ -119,17 +120,16 @@ export class CohereEmbeddingService {
 
       // Process image items if any
       if (imageItems.length > 0) {
-        console.log(
-          `    🖼️ Processing ${imageItems.length} image input(s)...`,
-        );
+        console.log(`    🖼️ Processing ${imageItems.length} image input(s)...`);
 
         // Process images one by one since Cohere supports only one image per request
         for (const imageItem of imageItems) {
-          const imageData = (imageItem as { type: 'image'; image: string }).image;
-          
+          const imageData = (imageItem as { type: 'image'; image: string })
+            .image;
+
           // Ensure proper data URL format
-          const imageUrl = imageData.startsWith('data:') 
-            ? imageData 
+          const imageUrl = imageData.startsWith('data:')
+            ? imageData
             : `data:image/png;base64,${imageData}`;
 
           console.log(`    🔍 Image URL length: ${imageUrl.length} chars`);
@@ -138,7 +138,8 @@ export class CohereEmbeddingService {
           const imageResponse = await client.embed({
             model: 'embed-v4.0',
             images: [imageUrl],
-            inputType: inputType === 'search_query' ? 'search_document' : inputType, // images default to search_document
+            inputType:
+              inputType === 'search_query' ? 'search_document' : inputType, // images default to search_document
             embeddingTypes: ['float'],
           });
 
@@ -267,7 +268,7 @@ export class CohereEmbeddingService {
   ): Promise<number[]> {
     // Validate and clean base64 image data
     const cleanImageData = this.validateAndCleanBase64Image(imageBase64);
-    
+
     return this.generateSingleEmbedding(
       { type: 'image', image: cleanImageData },
       inputType,
@@ -312,34 +313,44 @@ export class CohereEmbeddingService {
     try {
       const buffer = Buffer.from(cleanBase64, 'base64');
       const estimatedFileSize = buffer.length;
-      
+
       // Check if it's likely a valid image (PNG should start with specific bytes)
-      const pngHeader = Buffer.from([0x89, 0x50, 0x4E, 0x47]); // PNG header
-      const jpegHeader = Buffer.from([0xFF, 0xD8, 0xFF]); // JPEG header
-      
-      const isValidImage = buffer.subarray(0, 4).equals(pngHeader) || 
-                          buffer.subarray(0, 3).equals(jpegHeader);
-      
-      console.log(`    🔍 Base64 validation: ${cleanBase64.length} chars → ${estimatedFileSize} bytes`);
+      const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47]); // PNG header
+      const jpegHeader = Buffer.from([0xff, 0xd8, 0xff]); // JPEG header
+
+      const isValidImage =
+        buffer.subarray(0, 4).equals(pngHeader) ||
+        buffer.subarray(0, 3).equals(jpegHeader);
+
+      console.log(
+        `    🔍 Base64 validation: ${cleanBase64.length} chars → ${estimatedFileSize} bytes`,
+      );
       console.log(`    🖼️ Image format valid: ${isValidImage ? 'YES' : 'NO'}`);
-      
+
       if (!isValidImage) {
-        console.warn(`    ⚠️ Warning: Base64 doesn't appear to be a valid PNG/JPEG image`);
-        console.warn(`    First 16 bytes: ${buffer.subarray(0, 16).toString('hex')}`);
+        console.warn(
+          `    ⚠️ Warning: Base64 doesn't appear to be a valid PNG/JPEG image`,
+        );
+        console.warn(
+          `    First 16 bytes: ${buffer.subarray(0, 16).toString('hex')}`,
+        );
       }
-      
+
       // Check for very small images that might be invalid
       if (estimatedFileSize < 100) {
-        throw new Error(`Image too small: ${estimatedFileSize} bytes (likely corrupted)`);
+        throw new Error(
+          `Image too small: ${estimatedFileSize} bytes (likely corrupted)`,
+        );
       }
-      
     } catch (decodeError) {
-      throw new Error(`Base64 decode failed: ${decodeError instanceof Error ? decodeError.message : 'Unknown error'}`);
+      throw new Error(
+        `Base64 decode failed: ${decodeError instanceof Error ? decodeError.message : 'Unknown error'}`,
+      );
     }
 
     // Show first few characters for debugging
     console.log(`    📝 Base64 preview: ${cleanBase64.substring(0, 50)}...`);
-    
+
     return cleanBase64;
   }
 }
