@@ -148,9 +148,12 @@ const processWithDocling = async (
 
     const mimeType = mimeTypes[fileExtension] || 'application/pdf';
 
+    // Convert Buffer to Uint8Array for File constructor
+    const fileData = new Uint8Array(fileBuffer);
+    
     // Create a File object from buffer
     const file = new File(
-      [fileBuffer],
+      [fileData],
       filePath.split('/').pop() || `document.${fileExtension}`,
       {
         type: mimeType,

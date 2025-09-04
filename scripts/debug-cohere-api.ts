@@ -15,7 +15,7 @@ async function testCohereAPI() {
   }
   
   const client = new CohereClient({
-    apiKey: apiKey,
+    token: apiKey,
   });
   
   // Test 1: Simple texts parameter
@@ -28,7 +28,11 @@ async function testCohereAPI() {
       embeddingTypes: ['float'],
     });
     console.log('✅ Success with texts parameter');
-    console.log(`📊 Embeddings shape: ${response1.embeddings?.length} x ${response1.embeddings?.[0]?.length}`);
+    if (Array.isArray(response1.embeddings)) {
+      console.log(`📊 Embeddings shape: ${response1.embeddings.length} x ${response1.embeddings[0]?.length}`);
+    } else {
+      console.log('📊 Embeddings:', response1.embeddings);
+    }
   } catch (error: any) {
     console.log('❌ Failed with texts parameter:', error.message);
     if (error.body) {
@@ -36,28 +40,23 @@ async function testCohereAPI() {
     }
   }
   
-  // Test 2: inputs parameter with text
-  console.log('\n🧪 Test 2: Using inputs parameter for text');
+  // Test 2: Multiple texts
+  console.log('\n🧪 Test 2: Using multiple texts');
   try {
     const response2 = await client.embed({
       model: 'embed-v4.0',
-      inputs: [
-        {
-          content: [
-            {
-              type: 'text',
-              text: 'Hello world'
-            }
-          ]
-        }
-      ],
+      texts: ['Hello world', 'This is a test'],
       inputType: 'search_document',
       embeddingTypes: ['float'],
     });
-    console.log('✅ Success with inputs parameter');
-    console.log(`📊 Embeddings shape: ${response2.embeddings?.length} x ${response2.embeddings?.[0]?.length}`);
+    console.log('✅ Success with multiple texts');
+    if (Array.isArray(response2.embeddings)) {
+      console.log(`📊 Embeddings shape: ${response2.embeddings.length} x ${response2.embeddings[0]?.length}`);
+    } else {
+      console.log('📊 Embeddings:', response2.embeddings);
+    }
   } catch (error: any) {
-    console.log('❌ Failed with inputs parameter:', error.message);
+    console.log('❌ Failed with multiple texts:', error.message);
     if (error.body) {
       console.log('📄 Error body:', JSON.stringify(error.body, null, 2));
     }

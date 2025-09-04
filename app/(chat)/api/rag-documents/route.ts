@@ -60,7 +60,9 @@ export async function POST(request: Request) {
 
     // Create a temporary file for processing
     const tempDir = os.tmpdir();
-    const tempFilePath = path.join(tempDir, blobName);
+    // Sanitize the filename to prevent path issues
+    const sanitizedBlobName = blobName.replace(/[<>:"/\\|?*]/g, '_');
+    const tempFilePath = path.join(tempDir, sanitizedBlobName);
 
     // Write the file to disk for processing
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -99,9 +101,13 @@ export async function POST(request: Request) {
     } finally {
       // Clean up the temporary file
       try {
-        fs.unlinkSync(tempFilePath);
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+          console.log(`Cleaned up temporary file: ${tempFilePath}`);
+        }
       } catch (error) {
         console.error('Error deleting temporary file:', error);
+        console.error('Temp file path was:', tempFilePath);
       }
     }
 

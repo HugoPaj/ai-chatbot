@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       filename: doc.metadata.filename,
       page: doc.metadata.page,
       imageUrl: doc.metadata.imageUrl,
-      content: doc.content?.substring(0, 100) + '...',
+      content: doc.metadata.content?.substring(0, 100) + '...',
       hasImageData: !!doc.metadata.imageData,
       imageDataLength: doc.metadata.imageData?.length || 0,
     }));
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
         filename: doc.metadata.filename,
         page: doc.metadata.page,
         imageUrl: doc.metadata.imageUrl,
-        content: doc.content,
+        content: doc.metadata.content,
         hasImageData: !!doc.metadata.imageData,
         imageDataLength: doc.metadata.imageData?.length || 0,
       })),

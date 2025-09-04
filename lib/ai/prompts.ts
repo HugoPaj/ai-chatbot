@@ -16,12 +16,11 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
 
       if (doc.metadata.contentType === 'image' && doc.metadata.imageUrl) {
         // Include the image itself when available with description
-        const imageDescription = doc.content || 'Image from document';
+        const imageDescription = doc.metadata.content || 'Image from document';
         return `${header}\n${imageDescription}\n\n![${doc.metadata.filename} - ${imageDescription}](${doc.metadata.imageUrl})`;
       }
 
-      return `${header}\n${doc.content || doc.metadata.content || ''}`;
-    })
+      return `${header}\n${doc.metadata.content || ''}`;    })
     .join('\n\n---\n\n');
 };
 

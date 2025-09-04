@@ -39,7 +39,7 @@ export class CohereEmbeddingService {
         throw new Error('COHERE_API_KEY or CO_API_KEY is not configured');
       }
       this.cohere = new CohereClient({
-        apiKey: apiKey,
+        token: apiKey,
       });
     }
     return this.cohere;
@@ -113,8 +113,13 @@ export class CohereEmbeddingService {
           embeddingTypes: ['float'],
         });
 
-        if (textResponse.embeddings?.float) {
-          embeddings.push(...textResponse.embeddings.float);
+        if (textResponse.embeddings) {
+          // Handle both possible response formats
+          if (Array.isArray(textResponse.embeddings)) {
+            embeddings.push(...textResponse.embeddings);
+          } else if ('float' in textResponse.embeddings) {
+            embeddings.push(...(textResponse.embeddings as any).float);
+          }
         }
       }
 
@@ -143,8 +148,13 @@ export class CohereEmbeddingService {
             embeddingTypes: ['float'],
           });
 
-          if (imageResponse.embeddings?.float) {
-            embeddings.push(...imageResponse.embeddings.float);
+          if (imageResponse.embeddings) {
+            // Handle both possible response formats
+            if (Array.isArray(imageResponse.embeddings)) {
+              embeddings.push(...imageResponse.embeddings);
+            } else if ('float' in imageResponse.embeddings) {
+              embeddings.push(...(imageResponse.embeddings as any).float);
+            }
           }
         }
       }
