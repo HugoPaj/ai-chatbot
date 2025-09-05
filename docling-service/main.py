@@ -40,11 +40,15 @@ app = FastAPI(
 )
 
 # CORS middleware for Node.js integration
+# Get allowed origins from environment variable for production security
+allowed_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
+allowed_origins.extend(["https://comillas.vercel.app"])  # Always allow your main domain
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],  # Add your Next.js ports
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["POST", "GET", "OPTIONS"],  # Only needed methods
     allow_headers=["*"],
 )
 

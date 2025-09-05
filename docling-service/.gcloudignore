@@ -1,0 +1,7 @@
+# Ignore everything except what we need
+*
+!Dockerfile
+!main.py
+!requirements.txt
+!requirements-minimal.txt
+!README.md
