@@ -20,7 +20,7 @@ export const myProvider = isTestEnvironment
   : customProvider({
       languageModels: {
         'chat-model': xai('grok-3'),
-        'chat-model-reasoning': xai('grok-4'),
+        'chat-model-reasoning': xai('grok-3-mini'),
         'title-model': xai('grok-3'),
         'artifact-model': xai('grok-3'),
       },
