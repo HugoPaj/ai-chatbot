@@ -19,7 +19,6 @@ import {
   getChatById,
   getMessageCountByUserId,
   getMessagesByChatId,
-  getStreamIdsByChatId,
   saveChat,
   saveMessages,
 } from '@/lib/db/queries';
@@ -39,8 +38,6 @@ import {
   type ResumableStreamContext,
 } from 'resumable-stream';
 import { after } from 'next/server';
-import type { Chat } from '@/lib/db/schema';
-import { differenceInSeconds } from 'date-fns';
 import { ChatSDKError } from '@/lib/errors';
 
 export const maxDuration = 60;
@@ -384,6 +381,14 @@ export async function POST(request: Request) {
         result.mergeIntoDataStream(dataStream, {
           sendReasoning: true,
         });
+
+        // Send sources data after the response is complete
+        if (documentSources.length > 0) {
+          dataStream.writeData({
+            type: 'sources',
+            content: JSON.stringify(documentSources),
+          });
+        }
       },
       onError: () => {
         return 'Oops, an error occurred!';
@@ -422,7 +427,7 @@ export async function GET(request: Request) {
     return new ChatSDKError('unauthorized:chat').toResponse();
   }
 
-  let chat: Chat;
+  let chat: any;
 
   try {
     chat = await getChatById({ id: chatId });

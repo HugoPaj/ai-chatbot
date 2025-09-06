@@ -18,6 +18,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { MessageEditor } from './message-editor';
 import { DocumentPreview } from './document-preview';
 import { MessageReasoning } from './message-reasoning';
+import { SourcesDisplay } from './sources-display';
+import { useSources } from '@/hooks/use-sources';
 import type { UseChatHelpers } from '@ai-sdk/react';
 
 const PurePreviewMessage = ({
@@ -40,6 +42,7 @@ const PurePreviewMessage = ({
   requiresScrollPadding: boolean;
 }) => {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
+  const { sources } = useSources({ chatId });
 
   return (
     <AnimatePresence>
@@ -220,6 +223,10 @@ const PurePreviewMessage = ({
                 }
               }
             })}
+
+            {message.role === 'assistant' &&
+              sources.length > 0 &&
+              !isLoading && <SourcesDisplay sources={sources} />}
 
             {!isReadonly && (
               <MessageActions

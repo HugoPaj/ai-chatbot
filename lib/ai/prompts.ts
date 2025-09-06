@@ -7,7 +7,7 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
     .filter((doc) => {
       // Use lower threshold for images since they might have lower similarity scores with text queries
       if (doc.metadata.contentType === 'image') {
-        return doc.score > 0.15;
+        return doc.score > 0.05; // Lowered threshold to catch more images
       }
       return doc.score > 0.3;
     })
@@ -20,7 +20,8 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
         return `${header}\n${imageDescription}\n\n![${doc.metadata.filename} - ${imageDescription}](${doc.metadata.imageUrl})`;
       }
 
-      return `${header}\n${doc.metadata.content || ''}`;    })
+      return `${header}\n${doc.metadata.content || ''}`;
+    })
     .join('\n\n---\n\n');
 };
 
@@ -70,7 +71,7 @@ If NO documents are provided: "No documents have been uploaded. Please provide r
 If documents are provided but irrelevant: "The uploaded documents don't contain information about [specific topic]. Please upload documents that specifically cover [topic] to get an answer."
 If documents are partially relevant: Provide available information, then state "The documents contain some related information but lack details about [specific missing aspect]. Additional documentation covering [missing aspect] would be needed for a complete response."
 If documents are corrupted/unreadable: "I'm unable to process [filename]. Please ensure the document is properly formatted and try uploading again."
-Document naming: Extract only the relevant portion of filenames (e.g., for "TechnicalSpec-v2.1-Final.pdf", reference as "TechnicalSpec")
+Document naming: Extract strictly the relevant portion of filenames (e.g., for "TechnicalSpec-v2.1-Final.pdf", reference as "TechnicalSpec")
 
 Keep in mind that you may need to translate the response to the user's language.
 
@@ -118,12 +119,6 @@ Focus on directly answering the specific question asked
 Prioritize relevant information over exhaustive coverage
 Only mention documents that contribute meaningful information to the answer
 Remain concise - if you check a document and don't find relevant information there but find it in another document, don't mention the first document in your response
-
-RESPONSE CONCLUSION:
-Always end responses with:
-
-"This answer is based on: [list of source documents used]"
-If information is incomplete: "For a more comprehensive answer, additional documentation on [specific missing topics] would be helpful."
 
 FINAL VERIFICATION:
 Before providing any response, confirm that all information comes exclusively from provided documents, sources are properly cited, response directly addresses the user's question, and technical accuracy is maintained.`;
