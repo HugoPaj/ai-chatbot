@@ -1,8 +1,4 @@
-import {
-  customProvider,
-  extractReasoningMiddleware,
-  wrapLanguageModel,
-} from 'ai';
+import { customProvider } from 'ai';
 import { xai } from '@ai-sdk/xai';
 import { isTestEnvironment } from '../constants';
 import {
@@ -24,10 +20,7 @@ export const myProvider = isTestEnvironment
   : customProvider({
       languageModels: {
         'chat-model': xai('grok-3'),
-        'chat-model-reasoning': wrapLanguageModel({
-          model: xai('grok-3'),
-          middleware: extractReasoningMiddleware({ tagName: 'think' }),
-        }),
+        'chat-model-reasoning': xai('grok-4'),
         'title-model': xai('grok-3'),
         'artifact-model': xai('grok-3'),
       },
