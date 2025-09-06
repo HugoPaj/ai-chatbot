@@ -199,8 +199,8 @@ const processWithDocling = async (
 
     // Convert Docling chunks to DocumentChunk format
     const filename = cleanFilename(filePath, `unknown.${fileExtension}`);
-    const documentChunks: DocumentChunk[] = doclingResult.chunks.map(
-      (chunk, index) => {
+    const documentChunks: DocumentChunk[] = await Promise.all(
+      doclingResult.chunks.map(async (chunk, index) => {
         const coordinates: Coordinates | undefined = chunk.coordinates
           ? {
               x: chunk.coordinates.x,
@@ -218,31 +218,33 @@ const processWithDocling = async (
             }
           : undefined;
 
-        // Save image chunks to disk and generate a public URL
+        // Store image chunks in Vercel Blob (for serverless environments)
         let imageUrl: string | undefined;
         if (chunk.content_type === 'image' && chunk.image_data) {
-          const imagesDir = path.join(process.cwd(), 'public', 'doc-images');
-          if (!fs.existsSync(imagesDir)) {
-            fs.mkdirSync(imagesDir, { recursive: true });
+          try {
+            // Try to import Vercel Blob
+            const { put } = await import('@vercel/blob');
+            
+            const imageHash = crypto
+              .createHash('md5')
+              .update(chunk.image_data)
+              .digest('hex')
+              .slice(0, 16);
+            const imageFileName = `doc-images/${imageHash}.png`;
+            
+            // Upload to Vercel Blob
+            const imageBuffer = Buffer.from(chunk.image_data, 'base64');
+            const blob = await put(imageFileName, imageBuffer, {
+              access: 'public',
+            });
+            
+            imageUrl = blob.url;
+            console.log(`    🖼️  Saved extracted image to Vercel Blob: ${imageUrl}`);
+          } catch (error) {
+            console.warn(`    ⚠️  Failed to save image to Vercel Blob:`, error);
+            // Fallback: store as data URL for immediate use
+            imageUrl = `data:image/png;base64,${chunk.image_data}`;
           }
-
-          const imageHash = crypto
-            .createHash('md5')
-            .update(chunk.image_data)
-            .digest('hex')
-            .slice(0, 16);
-          const imageFileName = `${imageHash}.png`;
-          const imageFilePath = path.join(imagesDir, imageFileName);
-
-          if (!fs.existsSync(imageFilePath)) {
-            fs.writeFileSync(
-              imageFilePath,
-              Buffer.from(chunk.image_data, 'base64'),
-            );
-            console.log(`    🖼️  Saved extracted image to ${imageFilePath}`);
-          }
-
-          imageUrl = `/doc-images/${imageFileName}`;
         }
 
         return {
@@ -260,7 +262,7 @@ const processWithDocling = async (
             imageUrl,
           },
         };
-      },
+      }),
     );
 
     return documentChunks;
@@ -310,9 +312,9 @@ export const DocumentProcessor = {
       try {
         const dataBuffer = await readFile(filePath);
 
-        // Dynamic import to avoid test file execution issues at module load time
-        const pdfParse = await import('pdf-parse');
-        const data = await pdfParse.default(dataBuffer);
+        // Use the isolated PDF processor to avoid hardcoded file issues
+        const { parsePDF } = await import('./pdfProcessor');
+        const data = await parsePDF(dataBuffer);
 
         if (!data) {
           throw new Error('PDF parsing returned null');
@@ -371,23 +373,30 @@ export const DocumentProcessor = {
       const imageBuffer = await readFile(filePath);
       const imageBase64 = imageBuffer.toString('base64');
 
-      // Save image to disk and generate URL
-      const imagesDir = path.join(process.cwd(), 'public', 'doc-images');
-      if (!fs.existsSync(imagesDir)) {
-        fs.mkdirSync(imagesDir, { recursive: true });
+      // Store image in Vercel Blob (for serverless environments)
+      let imageUrl: string;
+      try {
+        const { put } = await import('@vercel/blob');
+        
+        const imageHash = crypto
+          .createHash('md5')
+          .update(imageBase64)
+          .digest('hex')
+          .slice(0, 16);
+        const imageFileName = `doc-images/${imageHash}.png`;
+        
+        // Upload to Vercel Blob
+        const blob = await put(imageFileName, imageBuffer, {
+          access: 'public',
+        });
+        
+        imageUrl = blob.url;
+        console.log(`    🖼️  Saved uploaded image to Vercel Blob: ${imageUrl}`);
+      } catch (error) {
+        console.warn(`    ⚠️  Failed to save image to Vercel Blob:`, error);
+        // Fallback: use data URL
+        imageUrl = `data:image/png;base64,${imageBase64}`;
       }
-      const imageHash = crypto
-        .createHash('md5')
-        .update(imageBase64)
-        .digest('hex')
-        .slice(0, 16);
-      const imageFileName = `${imageHash}.png`;
-      const imageFilePath = path.join(imagesDir, imageFileName);
-      if (!fs.existsSync(imageFilePath)) {
-        fs.writeFileSync(imageFilePath, imageBuffer);
-        console.log(`    🖼️  Saved uploaded image to ${imageFilePath}`);
-      }
-      const imageUrl = `/doc-images/${imageFileName}`;
 
       const filename = cleanFilename(filePath, 'unknown.jpg');
 
