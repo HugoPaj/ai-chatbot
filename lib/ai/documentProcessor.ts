@@ -150,7 +150,7 @@ const processWithDocling = async (
 
     // Convert Buffer to Uint8Array for File constructor
     const fileData = new Uint8Array(fileBuffer);
-    
+
     // Create a File object from buffer
     const file = new File(
       [fileData],
@@ -306,37 +306,49 @@ export const DocumentProcessor = {
       console.log(
         `    📖 Using fallback PDF text extraction (no images/tables)`,
       );
-      const dataBuffer = await readFile(filePath);
-      
-      // Dynamic import to avoid test file execution issues at module load time
-      const { default: pdfParseModule } = await import('pdf-parse');
-      const data = await pdfParseModule(dataBuffer);
 
-      console.log(
-        `    📝 Extracted ${data.text.length} characters from ${data.numpages} pages`,
-      );
+      try {
+        const dataBuffer = await readFile(filePath);
 
-      if (!data.text || data.text.trim().length === 0) {
-        console.warn(`    ⚠️  No text content found in PDF`);
-        return [];
+        // Dynamic import to avoid test file execution issues at module load time
+        const pdfParse = await import('pdf-parse');
+        const data = await pdfParse.default(dataBuffer);
+
+        if (!data) {
+          throw new Error('PDF parsing returned null');
+        }
+
+        console.log(
+          `    📝 Extracted ${data.text.length} characters from ${data.numpages} pages`,
+        );
+
+        if (!data.text || data.text.trim().length === 0) {
+          console.warn(`    ⚠️  No text content found in PDF`);
+          return [];
+        }
+
+        const chunks = chunkText(data.text, 1000, 200);
+        const filename = cleanFilename(filePath, 'unknown.pdf');
+
+        return chunks.map(
+          (chunk: string, index: number): DocumentChunk => ({
+            content: chunk,
+            metadata: {
+              source: filePath,
+              page: Math.floor(index / 2) + 1,
+              type: 'pdf',
+              filename,
+              contentHash: contentHash || '',
+              contentType: 'text',
+            },
+          }),
+        );
+      } catch (pdfError) {
+        console.error(`    ❌ PDF parsing failed:`, pdfError);
+        throw new Error(
+          `PDF processing failed: ${pdfError instanceof Error ? pdfError.message : String(pdfError)}`,
+        );
       }
-
-      const chunks = chunkText(data.text, 1000, 200);
-      const filename = cleanFilename(filePath, 'unknown.pdf');
-
-      return chunks.map(
-        (chunk: string, index: number): DocumentChunk => ({
-          content: chunk,
-          metadata: {
-            source: filePath,
-            page: Math.floor(index / 2) + 1,
-            type: 'pdf',
-            filename,
-            contentHash: contentHash || '',
-            contentType: 'text',
-          },
-        }),
-      );
     } catch (error) {
       console.error(`    ❌ Error processing document ${filePath}:`, error);
       throw new Error(`Failed to process document: ${filePath}`);

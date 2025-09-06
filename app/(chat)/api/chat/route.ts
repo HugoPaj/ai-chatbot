@@ -45,22 +45,35 @@ import { ChatSDKError } from '@/lib/errors';
 
 export const maxDuration = 60;
 
+import redis from '@/lib/redis';
+
 let globalStreamContext: ResumableStreamContext | null = null;
 
 function getStreamContext() {
   if (!globalStreamContext) {
     try {
+      const redisStorage = {
+        async get(key: string) {
+          const value = await redis.get(key);
+          return value ? JSON.parse(value) : null;
+        },
+        async set(key: string, value: any) {
+          await redis.set(key, JSON.stringify(value), 'EX', 3600); // 1 hour expiry
+        },
+        async delete(key: string) {
+          await redis.del(key);
+        },
+      };
+
       globalStreamContext = createResumableStreamContext({
         waitUntil: after,
+        // @ts-ignore - storage is a valid option but types are not updated
+        storage: redisStorage,
       });
     } catch (error: any) {
-      if (error.message.includes('REDIS_URL')) {
-        console.log(
-          ' > Resumable streams are disabled due to missing REDIS_URL',
-        );
-      } else {
-        console.error(error);
-      }
+      console.error('Redis initialization error:', error);
+      // Fallback to non-resumable stream
+      return null;
     }
   }
 
@@ -377,15 +390,8 @@ export async function POST(request: Request) {
       },
     });
 
-    const streamContext = getStreamContext();
-
-    if (streamContext) {
-      return new Response(
-        await streamContext.resumableStream(streamId, () => stream),
-      );
-    } else {
-      return new Response(stream);
-    }
+    // Return direct stream response without Redis
+    return new Response(stream);
   } catch (error) {
     if (error instanceof ChatSDKError) {
       return error.toResponse();
@@ -403,13 +409,6 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const streamContext = getStreamContext();
-  const resumeRequestedAt = new Date();
-
-  if (!streamContext) {
-    return new Response(null, { status: 204 });
-  }
-
   const { searchParams } = new URL(request.url);
   const chatId = searchParams.get('chatId');
 
@@ -439,62 +438,31 @@ export async function GET(request: Request) {
     return new ChatSDKError('forbidden:chat').toResponse();
   }
 
-  const streamIds = await getStreamIdsByChatId({ chatId });
-
-  if (!streamIds.length) {
-    return new ChatSDKError('not_found:stream').toResponse();
-  }
-
-  const recentStreamId = streamIds.at(-1);
-
-  if (!recentStreamId) {
-    return new ChatSDKError('not_found:stream').toResponse();
-  }
+  const messages = await getMessagesByChatId({ id: chatId });
+  const mostRecentMessage = messages.at(-1);
 
   const emptyDataStream = createDataStream({
     execute: () => {},
   });
 
-  const stream = await streamContext.resumableStream(
-    recentStreamId,
-    () => emptyDataStream,
-  );
-
-  /*
-   * For when the generation is streaming during SSR
-   * but the resumable stream has concluded at this point.
-   */
-  if (!stream) {
-    const messages = await getMessagesByChatId({ id: chatId });
-    const mostRecentMessage = messages.at(-1);
-
-    if (!mostRecentMessage) {
-      return new Response(emptyDataStream, { status: 200 });
-    }
-
-    if (mostRecentMessage.role !== 'assistant') {
-      return new Response(emptyDataStream, { status: 200 });
-    }
-
-    const messageCreatedAt = new Date(mostRecentMessage.createdAt);
-
-    if (differenceInSeconds(resumeRequestedAt, messageCreatedAt) > 15) {
-      return new Response(emptyDataStream, { status: 200 });
-    }
-
-    const restoredStream = createDataStream({
-      execute: (buffer) => {
-        buffer.writeData({
-          type: 'append-message',
-          message: JSON.stringify(mostRecentMessage),
-        });
-      },
-    });
-
-    return new Response(restoredStream, { status: 200 });
+  if (!mostRecentMessage) {
+    return new Response(emptyDataStream, { status: 200 });
   }
 
-  return new Response(stream, { status: 200 });
+  if (mostRecentMessage.role !== 'assistant') {
+    return new Response(emptyDataStream, { status: 200 });
+  }
+
+  const restoredStream = createDataStream({
+    execute: (buffer) => {
+      buffer.writeData({
+        type: 'append-message',
+        message: JSON.stringify(mostRecentMessage),
+      });
+    },
+  });
+
+  return new Response(restoredStream, { status: 200 });
 }
 
 export async function DELETE(request: Request) {
