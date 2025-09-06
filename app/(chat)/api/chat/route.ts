@@ -230,7 +230,37 @@ export async function POST(request: Request) {
 
           // Fall back to text search if no results were returned from the image search
           if (similarDocs.length === 0) {
-            similarDocs = await vectorStore.searchSimilar(userMessageText, 100);
+            // Check if user is asking specifically about images/figures/photos
+            const isImageQuery =
+              /\b(imagen|foto|figura|diagrama|gráfico|chart|image|picture|photo|figure|diagram|visual|fotos|imágenes|figuras|diagramas|gráficos|mostrar|enseñar|ver)/i.test(
+                userMessageText,
+              );
+
+            if (isImageQuery) {
+              console.log(
+                '[VectorStore] Detected image query - searching with boosted image results',
+              );
+              // Search with higher limit and boost image results
+              const allResults = await vectorStore.searchSimilar(
+                userMessageText,
+                100,
+              );
+              // Boost image results by adding a score bonus and prioritize them
+              similarDocs = allResults
+                .map((doc) => ({
+                  ...doc,
+                  score:
+                    doc.metadata.contentType === 'image'
+                      ? doc.score + 0.15
+                      : doc.score,
+                }))
+                .sort((a, b) => b.score - a.score);
+            } else {
+              similarDocs = await vectorStore.searchSimilar(
+                userMessageText,
+                100,
+              );
+            }
           }
 
           console.log(
@@ -279,8 +309,26 @@ export async function POST(request: Request) {
             // Debug: Log if images are included in context
             if (documentContext.includes('![')) {
               console.log('[VectorStore] ✅ Images included in context');
+              console.log(
+                '[VectorStore] Context preview:',
+                `${documentContext.substring(0, 500)}...`,
+              );
             } else {
               console.log('[VectorStore] ❌ No images in final context');
+              console.log(
+                '[VectorStore] Available image results:',
+                imageResults.length,
+              );
+              if (imageResults.length > 0) {
+                console.log(
+                  '[VectorStore] Image results details:',
+                  imageResults.map((doc) => ({
+                    score: doc.score,
+                    hasUrl: !!doc.metadata.imageUrl,
+                    content: doc.metadata.content?.substring(0, 100),
+                  })),
+                );
+              }
             }
 
             // Extract unique source filenames

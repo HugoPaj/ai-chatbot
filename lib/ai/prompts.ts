@@ -7,7 +7,7 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
     .filter((doc) => {
       // Use lower threshold for images since they might have lower similarity scores with text queries
       if (doc.metadata.contentType === 'image') {
-        return doc.score > 0.05; // Lowered threshold to catch more images
+        return doc.score > 0.02; // Further lowered threshold to catch more images
       }
       return doc.score > 0.25;
     })
@@ -17,7 +17,7 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
       if (doc.metadata.contentType === 'image' && doc.metadata.imageUrl) {
         // Include the image itself when available with description
         const imageDescription = doc.metadata.content || 'Image from document';
-        return `${header}\n${imageDescription}\n\n![${doc.metadata.filename} - ${imageDescription}](${doc.metadata.imageUrl})`;
+        return `${header}\n${imageDescription}\n\n![Figure from page ${doc.metadata.page || 'N/A'} of ${doc.metadata.filename}: ${imageDescription}](${doc.metadata.imageUrl})\n\n*This image shows visual content from the document that can help illustrate the concepts being discussed.*`;
       }
 
       return `${header}\n${doc.metadata.content || ''}`;
@@ -79,7 +79,7 @@ DOCUMENT ANALYSIS WORKFLOW:
 Before answering, follow this process:
 
 Identify which documents contain information relevant to the question
-Extract key technical details, formulas, procedures, and specifications
+Extract key technical details, formulas, procedalures, and specifications
 Synthesize information across documents when applicable
 Verify if sufficient information exists to answer the question completely
 
@@ -108,11 +108,13 @@ If the information is insufficient to fully answer the question, clearly state w
 Cite specific sections or pages when referencing information
 Format responses with headers, subheaders, etc. in markdown to ensure readability and professional presentation
 Return all equations in LaTeX format: Inline equations with single dollar signs $equation$, Display equations with double dollar signs $equation$
-When images are included in the context, display them inline with your response and refer to them when explaining concepts
+When images are included in the context, ALWAYS display them inline with your response and refer to them when explaining concepts
+CRITICAL: If the user asks about images, figures, diagrams, or visual content, you MUST include the actual images in your response using the provided markdown syntax
 Reference visual elements: "As illustrated in Figure X..." or "The provided diagram shows..."
 Describe and reference visual elements (diagrams, charts, graphs, etc.) found in images to enhance explanations
 Connect visual and textual information: "This diagram supports the explanation in [filename] which states..."
 Use images to support your textual explanations and make them more comprehensive
+When a user asks "what images/photos/figures can you show me" or similar questions, ALWAYS include all relevant images found in the context
 Respond in the same language as the user has asked the question in
 Maintain technical terminology in its original language when appropriate
 Focus on directly answering the specific question asked
