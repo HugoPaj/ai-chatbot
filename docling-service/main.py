@@ -275,125 +275,100 @@ def extract_chunks_from_docling_doc(doc: DoclingDocument, filename: str = '', ma
     try:
         logger.info("Processing DoclingDocument for text, images, and tables")
         
-        # 1. Extract text content from document body elements to preserve page information
+        # 1. Extract text using markdown export with page-aware chunking and overlap
         try:
-            if hasattr(doc, 'body') and doc.body:
-                current_chunk = []
-                current_length = 0
-                current_page = 1
-                
-                for element in doc.body:
-                    # Skip non-text elements (they'll be processed separately)
-                    if hasattr(element, 'label') and element.label in ['table', 'figure', 'picture']:
-                        continue
-                    
-                    # Get page number from element provenance
-                    element_page = 1
-                    if hasattr(element, 'prov') and element.prov:
-                        for prov in element.prov:
-                            if hasattr(prov, 'page') and prov.page is not None:
-                                element_page = prov.page + 1  # docling uses 0-based indexing
-                                break
-                    
-                    # Get text content from element
-                    element_text = ""
-                    if hasattr(element, 'text') and element.text:
-                        element_text = element.text.strip()
-                    elif hasattr(element, 'export_to_markdown') and callable(element.export_to_markdown):
-                        try:
-                            element_text = element.export_to_markdown().strip()
-                        except:
-                            pass
-                    
-                    if not element_text:
-                        continue
-                    
-                    # Clean the text
-                    element_text = clean_text_content(element_text)
-                    if not element_text or len(element_text) < 20:
-                        continue
-                    
-                    # If page changed or chunk would be too large, save current chunk
-                    if (element_page != current_page or 
-                        (current_length + len(element_text) > max_chunk_size and current_chunk)):
-                        
-                        if current_chunk:
-                            chunk_content = '\n\n'.join(current_chunk)
-                            chunks.append(ProcessedChunk(
-                                content=chunk_content,
-                                content_type='text',
-                                page=current_page,
-                                coordinates=None
-                            ))
-                        
-                        current_chunk = [element_text]
-                        current_length = len(element_text)
-                        current_page = element_page
-                    else:
-                        current_chunk.append(element_text)
-                        current_length += len(element_text) + 2  # +2 for \n\n
-                
-                # Add remaining chunk
-                if current_chunk:
-                    chunk_content = '\n\n'.join(current_chunk)
-                    chunks.append(ProcessedChunk(
-                        content=chunk_content,
-                        content_type='text',
-                        page=current_page,
-                        coordinates=None
-                    ))
-                
-                logger.info(f"Extracted {len(chunks)} text chunks from document body elements")
-            
-            # Fallback: if no text extracted from body elements, use markdown export
-            if not chunks:
-                logger.info("No text chunks from body elements, trying markdown export fallback")
-                markdown_content = doc.export_to_markdown()
-                if markdown_content and markdown_content.strip():
-                    # Clean and chunk the text
-                    cleaned_content = clean_text_content(markdown_content)
-                    if cleaned_content and len(cleaned_content) > 20:
-                        # Split text into chunks and estimate page numbers
-                        paragraphs = cleaned_content.split('\n\n')
-                        current_chunk = []
-                        current_length = 0
-                        chunk_index = 0
-                        
-                        for paragraph in paragraphs:
-                            paragraph = paragraph.strip()
-                            if not paragraph:
-                                continue
+            markdown_content = doc.export_to_markdown()
+            if markdown_content and markdown_content.strip():
+                # Clean the content
+                cleaned_content = clean_text_content(markdown_content)
+                if cleaned_content and len(cleaned_content) > 20:
+                    # Create a page mapping by analyzing document body elements
+                    page_mapping = {}  # character_position: page_number
+                    if hasattr(doc, 'body') and doc.body:
+                        char_pos = 0
+                        for element in doc.body:
+                            if hasattr(element, 'text') and element.text:
+                                element_page = 1
+                                if hasattr(element, 'prov') and element.prov:
+                                    for prov in element.prov:
+                                        if hasattr(prov, 'page') and prov.page is not None:
+                                            element_page = prov.page + 1
+                                            break
                                 
-                            # Check if adding this paragraph exceeds chunk size
-                            if current_length + len(paragraph) > max_chunk_size and current_chunk:
-                                # Save current chunk with estimated page number
-                                chunk_content = '\n\n'.join(current_chunk)
-                                estimated_page = max(1, chunk_index // 2 + 1)  # Rough estimate: 2 chunks per page
-                                chunks.append(ProcessedChunk(
-                                    content=chunk_content,
-                                    content_type='text',
-                                    page=estimated_page,
-                                    coordinates=None
-                                ))
-                                current_chunk = [paragraph]
-                                current_length = len(paragraph)
-                                chunk_index += 1
-                            else:
-                                current_chunk.append(paragraph)
-                                current_length += len(paragraph) + 2  # +2 for \n\n
+                                # Map character positions to pages
+                                text_len = len(element.text)
+                                for i in range(char_pos, char_pos + text_len):
+                                    page_mapping[i] = element_page
+                                char_pos += text_len
+                    
+                    # Function to estimate page based on character position
+                    def get_page_for_position(pos: int) -> int:
+                        if not page_mapping:
+                            # Fallback: estimate based on document structure
+                            total_pages = len(doc.pages) if hasattr(doc, 'pages') and doc.pages else 1
+                            estimated_page = max(1, min(total_pages, int((pos / len(cleaned_content)) * total_pages) + 1))
+                            return estimated_page
                         
-                        # Add remaining chunk
-                        if current_chunk:
-                            chunk_content = '\n\n'.join(current_chunk)
-                            estimated_page = max(1, chunk_index // 2 + 1)
+                        # Find the closest mapped position
+                        closest_pos = min(page_mapping.keys(), key=lambda x: abs(x - pos), default=0)
+                        return page_mapping.get(closest_pos, 1)
+                    
+                    # Chunking with overlap and page awareness
+                    overlap_size = max_chunk_size // 5  # 20% overlap
+                    sentences = [s.strip() for s in cleaned_content.split('. ') if s.strip()]
+                    
+                    current_chunk = []
+                    current_length = 0
+                    char_position = 0
+                    
+                    for i, sentence in enumerate(sentences):
+                        sentence_with_period = sentence + ('.' if not sentence.endswith(('.', '!', '?')) else '')
+                        
+                        # Check if adding this sentence exceeds chunk size
+                        if current_length + len(sentence_with_period) > max_chunk_size and current_chunk:
+                            # Save current chunk
+                            chunk_content = ' '.join(current_chunk)
+                            chunk_page = get_page_for_position(char_position - current_length // 2)
+                            
                             chunks.append(ProcessedChunk(
                                 content=chunk_content,
                                 content_type='text',
-                                page=estimated_page,
+                                page=chunk_page,
                                 coordinates=None
                             ))
+                            
+                            # Create overlap: keep last few sentences for context
+                            overlap_sentences = []
+                            overlap_length = 0
+                            for j in range(len(current_chunk) - 1, -1, -1):
+                                test_sentence = current_chunk[j]
+                                if overlap_length + len(test_sentence) <= overlap_size:
+                                    overlap_sentences.insert(0, test_sentence)
+                                    overlap_length += len(test_sentence)
+                                else:
+                                    break
+                            
+                            # Start new chunk with overlap + current sentence
+                            current_chunk = overlap_sentences + [sentence_with_period]
+                            current_length = sum(len(s) for s in current_chunk)
+                        else:
+                            current_chunk.append(sentence_with_period)
+                            current_length += len(sentence_with_period)
                         
-                        logger.info(f"Extracted {len(chunks)} text chunks from markdown export fallback")
+                        char_position += len(sentence_with_period)
+                    
+                    # Add remaining chunk
+                    if current_chunk:
+                        chunk_content = ' '.join(current_chunk)
+                        chunk_page = get_page_for_position(char_position - current_length // 2)
+                        chunks.append(ProcessedChunk(
+                            content=chunk_content,
+                            content_type='text',
+                            page=chunk_page,
+                            coordinates=None
+                        ))
+                    
+                    logger.info(f"Extracted {len(chunks)} text chunks with {overlap_size} char overlap and page mapping")
         
         except Exception as e:
             logger.warning(f"Text extraction failed: {e}")
