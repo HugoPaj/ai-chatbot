@@ -9,7 +9,7 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
       if (doc.metadata.contentType === 'image') {
         return doc.score > 0.05; // Lowered threshold to catch more images
       }
-      return doc.score > 0.3;
+      return doc.score > 0.25;
     })
     .map((doc) => {
       const header = `Source: ${doc.metadata.filename} (Page ${doc.metadata.page || 'N/A'})`;
