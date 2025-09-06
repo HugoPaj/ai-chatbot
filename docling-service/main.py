@@ -275,53 +275,128 @@ def extract_chunks_from_docling_doc(doc: DoclingDocument, filename: str = '', ma
     try:
         logger.info("Processing DoclingDocument for text, images, and tables")
         
-        # 1. Extract text content using docling's export_to_markdown method
+        # 1. Extract text content from document body elements to preserve page information
         try:
-            markdown_content = doc.export_to_markdown()
-            if markdown_content and markdown_content.strip():
-                # Clean and chunk the text
-                cleaned_content = clean_text_content(markdown_content)
-                if cleaned_content and len(cleaned_content) > 20:
-                    # Split text into chunks
-                    paragraphs = cleaned_content.split('\n\n')
-                    current_chunk = []
-                    current_length = 0
+            if hasattr(doc, 'body') and doc.body:
+                current_chunk = []
+                current_length = 0
+                current_page = 1
+                
+                for element in doc.body:
+                    # Skip non-text elements (they'll be processed separately)
+                    if hasattr(element, 'label') and element.label in ['table', 'figure', 'picture']:
+                        continue
                     
-                    for paragraph in paragraphs:
-                        paragraph = paragraph.strip()
-                        if not paragraph:
-                            continue
-                            
-                        # Check if adding this paragraph exceeds chunk size
-                        if current_length + len(paragraph) > max_chunk_size and current_chunk:
-                            # Save current chunk
+                    # Get page number from element provenance
+                    element_page = 1
+                    if hasattr(element, 'prov') and element.prov:
+                        for prov in element.prov:
+                            if hasattr(prov, 'page') and prov.page is not None:
+                                element_page = prov.page + 1  # docling uses 0-based indexing
+                                break
+                    
+                    # Get text content from element
+                    element_text = ""
+                    if hasattr(element, 'text') and element.text:
+                        element_text = element.text.strip()
+                    elif hasattr(element, 'export_to_markdown') and callable(element.export_to_markdown):
+                        try:
+                            element_text = element.export_to_markdown().strip()
+                        except:
+                            pass
+                    
+                    if not element_text:
+                        continue
+                    
+                    # Clean the text
+                    element_text = clean_text_content(element_text)
+                    if not element_text or len(element_text) < 20:
+                        continue
+                    
+                    # If page changed or chunk would be too large, save current chunk
+                    if (element_page != current_page or 
+                        (current_length + len(element_text) > max_chunk_size and current_chunk)):
+                        
+                        if current_chunk:
                             chunk_content = '\n\n'.join(current_chunk)
                             chunks.append(ProcessedChunk(
                                 content=chunk_content,
                                 content_type='text',
-                                page=1,  # We'll get better page info from elements later
+                                page=current_page,
                                 coordinates=None
                             ))
-                            current_chunk = [paragraph]
-                            current_length = len(paragraph)
-                        else:
-                            current_chunk.append(paragraph)
-                            current_length += len(paragraph) + 2  # +2 for \n\n
-                    
-                    # Add remaining chunk
-                    if current_chunk:
-                        chunk_content = '\n\n'.join(current_chunk)
-                        chunks.append(ProcessedChunk(
-                            content=chunk_content,
-                            content_type='text',
-                            page=1,
-                            coordinates=None
-                        ))
-                    
-                    logger.info(f"Extracted {len(chunks)} text chunks from markdown export")
+                        
+                        current_chunk = [element_text]
+                        current_length = len(element_text)
+                        current_page = element_page
+                    else:
+                        current_chunk.append(element_text)
+                        current_length += len(element_text) + 2  # +2 for \n\n
+                
+                # Add remaining chunk
+                if current_chunk:
+                    chunk_content = '\n\n'.join(current_chunk)
+                    chunks.append(ProcessedChunk(
+                        content=chunk_content,
+                        content_type='text',
+                        page=current_page,
+                        coordinates=None
+                    ))
+                
+                logger.info(f"Extracted {len(chunks)} text chunks from document body elements")
+            
+            # Fallback: if no text extracted from body elements, use markdown export
+            if not chunks:
+                logger.info("No text chunks from body elements, trying markdown export fallback")
+                markdown_content = doc.export_to_markdown()
+                if markdown_content and markdown_content.strip():
+                    # Clean and chunk the text
+                    cleaned_content = clean_text_content(markdown_content)
+                    if cleaned_content and len(cleaned_content) > 20:
+                        # Split text into chunks and estimate page numbers
+                        paragraphs = cleaned_content.split('\n\n')
+                        current_chunk = []
+                        current_length = 0
+                        chunk_index = 0
+                        
+                        for paragraph in paragraphs:
+                            paragraph = paragraph.strip()
+                            if not paragraph:
+                                continue
+                                
+                            # Check if adding this paragraph exceeds chunk size
+                            if current_length + len(paragraph) > max_chunk_size and current_chunk:
+                                # Save current chunk with estimated page number
+                                chunk_content = '\n\n'.join(current_chunk)
+                                estimated_page = max(1, chunk_index // 2 + 1)  # Rough estimate: 2 chunks per page
+                                chunks.append(ProcessedChunk(
+                                    content=chunk_content,
+                                    content_type='text',
+                                    page=estimated_page,
+                                    coordinates=None
+                                ))
+                                current_chunk = [paragraph]
+                                current_length = len(paragraph)
+                                chunk_index += 1
+                            else:
+                                current_chunk.append(paragraph)
+                                current_length += len(paragraph) + 2  # +2 for \n\n
+                        
+                        # Add remaining chunk
+                        if current_chunk:
+                            chunk_content = '\n\n'.join(current_chunk)
+                            estimated_page = max(1, chunk_index // 2 + 1)
+                            chunks.append(ProcessedChunk(
+                                content=chunk_content,
+                                content_type='text',
+                                page=estimated_page,
+                                coordinates=None
+                            ))
+                        
+                        logger.info(f"Extracted {len(chunks)} text chunks from markdown export fallback")
         
         except Exception as e:
-            logger.warning(f"Markdown export failed: {e}")
+            logger.warning(f"Text extraction failed: {e}")
         
         # 2. Extract images from pictures collection
         if hasattr(doc, 'pictures') and doc.pictures:

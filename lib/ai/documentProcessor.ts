@@ -2,7 +2,6 @@
 import { readFile } from 'node:fs/promises';
 import type { DocumentChunk, Coordinates, TableStructure } from '../types';
 import fs from 'node:fs';
-import path from 'node:path';
 import crypto from 'node:crypto';
 
 // Docling service configuration
@@ -224,22 +223,24 @@ const processWithDocling = async (
           try {
             // Try to import Vercel Blob
             const { put } = await import('@vercel/blob');
-            
+
             const imageHash = crypto
               .createHash('md5')
               .update(chunk.image_data)
               .digest('hex')
               .slice(0, 16);
             const imageFileName = `doc-images/${imageHash}.png`;
-            
+
             // Upload to Vercel Blob
             const imageBuffer = Buffer.from(chunk.image_data, 'base64');
             const blob = await put(imageFileName, imageBuffer, {
               access: 'public',
             });
-            
+
             imageUrl = blob.url;
-            console.log(`    🖼️  Saved extracted image to Vercel Blob: ${imageUrl}`);
+            console.log(
+              `    🖼️  Saved extracted image to Vercel Blob: ${imageUrl}`,
+            );
           } catch (error) {
             console.warn(`    ⚠️  Failed to save image to Vercel Blob:`, error);
             // Fallback: store as data URL for immediate use
@@ -332,19 +333,40 @@ export const DocumentProcessor = {
         const chunks = chunkText(data.text, 1000, 200);
         const filename = cleanFilename(filePath, 'unknown.pdf');
 
-        return chunks.map(
-          (chunk: string, index: number): DocumentChunk => ({
+        // Improved page number estimation
+        // Estimate average characters per page based on total pages and text length
+        const avgCharsPerPage = Math.max(
+          1000,
+          data.text.length / data.numpages,
+        );
+
+        return chunks.map((chunk: string, index: number): DocumentChunk => {
+          // Calculate cumulative character position for this chunk
+          const cumulativeChars = chunks
+            .slice(0, index)
+            .reduce((sum, c) => sum + c.length, 0);
+
+          // Estimate page number based on character position
+          const estimatedPage = Math.min(
+            data.numpages,
+            Math.max(
+              1,
+              Math.ceil((cumulativeChars + chunk.length / 2) / avgCharsPerPage),
+            ),
+          );
+
+          return {
             content: chunk,
             metadata: {
               source: filePath,
-              page: Math.floor(index / 2) + 1,
+              page: estimatedPage,
               type: 'pdf',
               filename,
               contentHash: contentHash || '',
               contentType: 'text',
             },
-          }),
-        );
+          };
+        });
       } catch (pdfError) {
         console.error(`    ❌ PDF parsing failed:`, pdfError);
         throw new Error(
@@ -377,19 +399,19 @@ export const DocumentProcessor = {
       let imageUrl: string;
       try {
         const { put } = await import('@vercel/blob');
-        
+
         const imageHash = crypto
           .createHash('md5')
           .update(imageBase64)
           .digest('hex')
           .slice(0, 16);
         const imageFileName = `doc-images/${imageHash}.png`;
-        
+
         // Upload to Vercel Blob
         const blob = await put(imageFileName, imageBuffer, {
           access: 'public',
         });
-        
+
         imageUrl = blob.url;
         console.log(`    🖼️  Saved uploaded image to Vercel Blob: ${imageUrl}`);
       } catch (error) {
