@@ -220,9 +220,33 @@ const processWithDocling = async (
         // Store image chunks in Vercel Blob (for serverless environments)
         let imageUrl: string | undefined;
         if (chunk.content_type === 'image' && chunk.image_data) {
+          console.log(
+            `    🖼️  [BLOB DEBUG] Processing image chunk ${index + 1}`,
+          );
+          console.log(
+            `    🖼️  [BLOB DEBUG] Image data length: ${chunk.image_data.length} chars`,
+          );
+          console.log(
+            `    🖼️  [BLOB DEBUG] BLOB_READ_WRITE_TOKEN present: ${!!process.env.BLOB_READ_WRITE_TOKEN}`,
+          );
+
           try {
             // Try to import Vercel Blob
+            console.log(
+              `    🔧 [BLOB DEBUG] Attempting to import @vercel/blob...`,
+            );
             const { put } = await import('@vercel/blob');
+            console.log(
+              `    ✅ [BLOB DEBUG] Successfully imported @vercel/blob`,
+            );
+
+            // Check if BLOB_READ_WRITE_TOKEN is available
+            if (!process.env.BLOB_READ_WRITE_TOKEN) {
+              console.warn(
+                `    ⚠️  [BLOB DEBUG] BLOB_READ_WRITE_TOKEN environment variable not found - using fallback`,
+              );
+              throw new Error('BLOB_READ_WRITE_TOKEN not available');
+            }
 
             const imageHash = crypto
               .createHash('md5')
@@ -231,21 +255,63 @@ const processWithDocling = async (
               .slice(0, 16);
             const imageFileName = `doc-images/${imageHash}.png`;
 
+            console.log(
+              `    🔧 [BLOB DEBUG] Generated filename: ${imageFileName}`,
+            );
+            console.log(`    🔧 [BLOB DEBUG] Image hash: ${imageHash}`);
+
             // Upload to Vercel Blob
             const imageBuffer = Buffer.from(chunk.image_data, 'base64');
+            console.log(
+              `    🔧 [BLOB DEBUG] Buffer size: ${imageBuffer.length} bytes`,
+            );
+
+            console.log(`    🚀 [BLOB DEBUG] Starting blob upload...`);
             const blob = await put(imageFileName, imageBuffer, {
               access: 'public',
+              contentType: 'image/png', // PDF extracted images are always PNG
             });
+            console.log(`    ✅ [BLOB DEBUG] Blob upload successful!`);
+            console.log(
+              `    ✅ [BLOB DEBUG] Blob response:`,
+              JSON.stringify(blob, null, 2),
+            );
 
             imageUrl = blob.url;
-            console.log(
-              `    🖼️  Saved extracted image to Vercel Blob: ${imageUrl}`,
+            console.log(`    🖼️  [BLOB DEBUG] Final image URL: ${imageUrl}`);
+
+            // Test if the URL is accessible
+            try {
+              const testResponse = await fetch(imageUrl, { method: 'HEAD' });
+              console.log(
+                `    🌐 [BLOB DEBUG] URL accessibility test: ${testResponse.status} ${testResponse.statusText}`,
+              );
+            } catch (testError) {
+              console.warn(
+                `    ⚠️  [BLOB DEBUG] URL accessibility test failed:`,
+                testError,
+              );
+            }
+          } catch (error: any) {
+            console.error(
+              `    ❌ [BLOB DEBUG] Failed to save image to Vercel Blob:`,
+              error,
             );
-          } catch (error) {
-            console.warn(`    ⚠️  Failed to save image to Vercel Blob:`, error);
+            console.error(`    ❌ [BLOB DEBUG] Error details:`, error.message);
+            if (error.stack) {
+              console.error(`    ❌ [BLOB DEBUG] Stack trace:`, error.stack);
+            }
+
             // Fallback: store as data URL for immediate use
             imageUrl = `data:image/png;base64,${chunk.image_data}`;
+            console.log(
+              `    🔄 [BLOB DEBUG] Using fallback data URL (length: ${imageUrl.length})`,
+            );
           }
+
+          console.log(
+            `    ✅ [BLOB DEBUG] Final imageUrl for chunk ${index + 1}: ${imageUrl ? `${imageUrl.substring(0, 100)}...` : 'undefined'}`,
+          );
         }
 
         return {
@@ -396,9 +462,34 @@ export const DocumentProcessor = {
       const imageBase64 = imageBuffer.toString('base64');
 
       // Store image in Vercel Blob (for serverless environments)
+      console.log(`    🖼️  [BLOB DEBUG] Processing uploaded image file`);
+      console.log(
+        `    🖼️  [BLOB DEBUG] Image base64 length: ${imageBase64.length} chars`,
+      );
+      console.log(
+        `    🖼️  [BLOB DEBUG] Image buffer size: ${imageBuffer.length} bytes`,
+      );
+      console.log(
+        `    🖼️  [BLOB DEBUG] BLOB_READ_WRITE_TOKEN present: ${!!process.env.BLOB_READ_WRITE_TOKEN}`,
+      );
+
       let imageUrl: string;
       try {
+        console.log(
+          `    🔧 [BLOB DEBUG] Attempting to import @vercel/blob for uploaded image...`,
+        );
         const { put } = await import('@vercel/blob');
+        console.log(
+          `    ✅ [BLOB DEBUG] Successfully imported @vercel/blob for uploaded image`,
+        );
+
+        // Check if BLOB_READ_WRITE_TOKEN is available
+        if (!process.env.BLOB_READ_WRITE_TOKEN) {
+          console.warn(
+            `    ⚠️  [BLOB DEBUG] BLOB_READ_WRITE_TOKEN not available for uploaded image - using fallback`,
+          );
+          throw new Error('BLOB_READ_WRITE_TOKEN not available');
+        }
 
         const imageHash = crypto
           .createHash('md5')
@@ -407,17 +498,74 @@ export const DocumentProcessor = {
           .slice(0, 16);
         const imageFileName = `doc-images/${imageHash}.png`;
 
+        console.log(
+          `    🔧 [BLOB DEBUG] Generated filename for uploaded image: ${imageFileName}`,
+        );
+        console.log(
+          `    🔧 [BLOB DEBUG] Image hash for uploaded image: ${imageHash}`,
+        );
+
         // Upload to Vercel Blob
+        console.log(
+          `    🚀 [BLOB DEBUG] Starting blob upload for uploaded image...`,
+        );
+        // Determine content type based on file extension
+        const contentType =
+          filePath.toLowerCase().endsWith('.jpg') ||
+          filePath.toLowerCase().endsWith('.jpeg')
+            ? 'image/jpeg'
+            : 'image/png';
+
         const blob = await put(imageFileName, imageBuffer, {
           access: 'public',
+          contentType,
         });
+        console.log(
+          `    ✅ [BLOB DEBUG] Blob upload successful for uploaded image!`,
+        );
+        console.log(
+          `    ✅ [BLOB DEBUG] Blob response for uploaded image:`,
+          JSON.stringify(blob, null, 2),
+        );
 
         imageUrl = blob.url;
-        console.log(`    🖼️  Saved uploaded image to Vercel Blob: ${imageUrl}`);
-      } catch (error) {
-        console.warn(`    ⚠️  Failed to save image to Vercel Blob:`, error);
+        console.log(
+          `    🖼️  [BLOB DEBUG] Final image URL for uploaded image: ${imageUrl}`,
+        );
+
+        // Test if the URL is accessible
+        try {
+          const testResponse = await fetch(imageUrl, { method: 'HEAD' });
+          console.log(
+            `    🌐 [BLOB DEBUG] URL accessibility test for uploaded image: ${testResponse.status} ${testResponse.statusText}`,
+          );
+        } catch (testError) {
+          console.warn(
+            `    ⚠️  [BLOB DEBUG] URL accessibility test failed for uploaded image:`,
+            testError,
+          );
+        }
+      } catch (error: any) {
+        console.error(
+          `    ❌ [BLOB DEBUG] Failed to save uploaded image to Vercel Blob:`,
+          error,
+        );
+        console.error(
+          `    ❌ [BLOB DEBUG] Error details for uploaded image:`,
+          error.message,
+        );
+        if (error.stack) {
+          console.error(
+            `    ❌ [BLOB DEBUG] Stack trace for uploaded image:`,
+            error.stack,
+          );
+        }
+
         // Fallback: use data URL
         imageUrl = `data:image/png;base64,${imageBase64}`;
+        console.log(
+          `    🔄 [BLOB DEBUG] Using fallback data URL for uploaded image (length: ${imageUrl.length})`,
+        );
       }
 
       const filename = cleanFilename(filePath, 'unknown.jpg');
@@ -437,6 +585,51 @@ export const DocumentProcessor = {
           imageData: imageBase64, // Store base64 data for embedding generation
           originalImagePath: filePath,
           imageUrl,
+        },
+      };
+    } catch (error) {
+      console.error(`    ❌ Error processing image ${filePath}:`, error);
+      throw new Error(`Failed to process image: ${filePath}`);
+    }
+  },
+
+  processImageWithUrl: async (
+    filePath: string,
+    contentHash?: string,
+    existingImageUrl?: string,
+  ): Promise<DocumentChunk> => {
+    try {
+      console.log(
+        `    🖼️  Processing image file with existing URL: ${filePath}`,
+      );
+
+      // Check if file exists
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`Image file not found: ${filePath}`);
+      }
+
+      // Read image file and convert to base64 for embedding generation
+      const imageBuffer = await readFile(filePath);
+      const imageBase64 = imageBuffer.toString('base64');
+
+      const filename = cleanFilename(filePath, 'unknown.jpg');
+
+      console.log(
+        `    📸 Converted image to base64 (${imageBase64.length} chars)`,
+      );
+      console.log(`    🔗 Using provided image URL: ${existingImageUrl}`);
+
+      return {
+        content: `Image: ${filename}. This image contains visual content that can be searched and analyzed using multimodal AI.`,
+        metadata: {
+          source: filePath,
+          type: 'image',
+          filename,
+          contentHash: contentHash || '',
+          contentType: 'image',
+          imageData: imageBase64, // Store base64 data for embedding generation
+          originalImagePath: filePath,
+          imageUrl: existingImageUrl, // Use the provided URL
         },
       };
     } catch (error) {

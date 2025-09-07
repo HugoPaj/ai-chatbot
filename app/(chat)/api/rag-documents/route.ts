@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { generateUUID } from '@/lib/utils';
 import type { DocumentChunk } from '@/lib/types';
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 
 // Maximum file size: 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -50,19 +50,26 @@ export async function POST(request: Request) {
       ).toResponse();
     }
 
-    // Upload to blob storage - store internal ID separately from display name
-    const fileId = generateUUID();
-    const fileName = file.name;
-    const blobName = `${fileId}-${fileName}`;
-    const blob = await put(blobName, file, {
-      access: 'public',
-    });
-
     // Create a temporary file for processing
     const tempDir = os.tmpdir();
-    // Sanitize the filename to prevent path issues
-    const sanitizedBlobName = blobName.replace(/[<>:"/\\|?*]/g, '_');
-    const tempFilePath = path.join(tempDir, sanitizedBlobName);
+    const fileId = generateUUID();
+    const fileName = file.name;
+    const sanitizedFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
+    const tempFilePath = path.join(tempDir, `${fileId}-${sanitizedFileName}`);
+
+    // Only upload images to blob storage (PDFs don't need public URLs)
+    let blob: { url: string } | null = null;
+    if (file.type.startsWith('image/')) {
+      console.log(`[RAG DEBUG] Uploading image to blob storage: ${fileName}`);
+      const blobName = `${fileId}-${fileName}`;
+      blob = await put(blobName, file, {
+        access: 'public',
+        contentType: file.type,
+      });
+      console.log(`[RAG DEBUG] Image uploaded to blob: ${blob.url}`);
+    } else {
+      console.log(`[RAG DEBUG] Skipping blob upload for PDF: ${fileName}`);
+    }
 
     // Write the file to disk for processing
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -84,13 +91,32 @@ export async function POST(request: Request) {
           contentHash,
         );
       } else if (file.type.startsWith('image/')) {
-        const singleChunk = await DocumentProcessor.processImage(
+        console.log(`[RAG DEBUG] Processing uploaded image file: ${file.name}`);
+        console.log(
+          `[RAG DEBUG] File type: ${file.type}, size: ${file.size} bytes`,
+        );
+
+        if (!blob) {
+          throw new Error('Image blob upload failed - no blob URL available');
+        }
+
+        console.log(`[RAG DEBUG] Using existing blob URL: ${blob.url}`);
+
+        // Process the image but skip the blob upload since we already uploaded it
+        const singleChunk = await DocumentProcessor.processImageWithUrl(
           tempFilePath,
           contentHash,
+          blob.url, // Pass the existing blob URL
         );
-        // Add the blob URL to the image chunk for future reference
-        singleChunk.metadata.imageUrl = blob.url;
+
         documentChunks = [singleChunk];
+
+        console.log(`[RAG DEBUG] Final chunk metadata:`, {
+          filename: singleChunk.metadata.filename,
+          contentType: singleChunk.metadata.contentType,
+          imageUrl: singleChunk.metadata.imageUrl,
+          hasImageData: !!singleChunk.metadata.imageData,
+        });
       }
     } catch (error) {
       console.error('Error processing document:', error);
@@ -118,19 +144,44 @@ export async function POST(request: Request) {
       ).toResponse();
     }
 
+    console.log(
+      `[RAG DEBUG] About to store ${documentChunks.length} document chunks`,
+    );
+
+    // Log image chunks specifically
+    const imageChunks = documentChunks.filter(
+      (chunk) => chunk.metadata.contentType === 'image',
+    );
+    if (imageChunks.length > 0) {
+      console.log(
+        `[RAG DEBUG] Found ${imageChunks.length} image chunks to store`,
+      );
+      imageChunks.forEach((chunk, index) => {
+        console.log(`[RAG DEBUG] Image chunk ${index + 1}:`, {
+          filename: chunk.metadata.filename,
+          imageUrl: chunk.metadata.imageUrl,
+          hasImageData: !!chunk.metadata.imageData,
+          imageDataLength: chunk.metadata.imageData?.length || 0,
+        });
+      });
+    }
+
     // Initialize vector store
     const vectorStore = new VectorStore();
     await vectorStore.initialize();
 
     // Store document chunks in vector database
+    console.log(`[RAG DEBUG] Storing chunks in vector database...`);
     await vectorStore.storeDocuments(documentChunks);
+    console.log(`[RAG DEBUG] Successfully stored chunks in vector database`);
 
     return Response.json({
       success: true,
       message: 'Document successfully uploaded and processed',
-      url: blob.url,
+      url: blob?.url || null, // Only include URL for images
       filename: file.name,
       chunks: documentChunks.length,
+      type: file.type,
     });
   } catch (error) {
     console.error('Error in document upload:', error);

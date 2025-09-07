@@ -3,6 +3,8 @@ import type { Geo } from '@vercel/functions';
 import type { SearchResult } from '../types';
 
 export const formatDocumentContext = (similarDocs: SearchResult[]) => {
+  let imageCounter = 1;
+
   return similarDocs
     .filter((doc) => {
       // Use lower threshold for images since they might have lower similarity scores with text queries
@@ -17,7 +19,12 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
       if (doc.metadata.contentType === 'image' && doc.metadata.imageUrl) {
         // Include the image itself when available with description
         const imageDescription = doc.metadata.content || 'Image from document';
-        return `${header}\n${imageDescription}\n\n![Figure from page ${doc.metadata.page || 'N/A'} of ${doc.metadata.filename}: ${imageDescription}](${doc.metadata.imageUrl})\n\n*This image shows visual content from the document that can help illustrate the concepts being discussed.*`;
+        const uniqueImageId = `image_${imageCounter}`;
+        const uniqueImageAlt = `${uniqueImageId}_${doc.metadata.filename}_page_${doc.metadata.page || 'unknown'}`;
+
+        imageCounter++;
+
+        return `${header}\n${imageDescription}\n\n![${uniqueImageAlt}: ${imageDescription}](${doc.metadata.imageUrl})\n\n*This image (${uniqueImageId}) shows visual content from the document that can help illustrate the concepts being discussed.*`;
       }
 
       return `${header}\n${doc.metadata.content || ''}`;
@@ -110,11 +117,13 @@ Format responses with headers, subheaders, etc. in markdown to ensure readabilit
 Return all equations in LaTeX format: Inline equations with single dollar signs $equation$, Display equations with double dollar signs $equation$
 When images are included in the context, ALWAYS display them inline with your response and refer to them when explaining concepts
 CRITICAL: If the user asks about images, figures, diagrams, or visual content, you MUST include the actual images in your response using the provided markdown syntax
+CRITICAL: When referencing images in your response, you MUST use the EXACT imageUrl provided for each specific image in the context. Each image has a unique identifier (image_1, image_2, etc.) - make sure to match the correct URL with the correct description.
 Reference visual elements: "As illustrated in Figure X..." or "The provided diagram shows..."
 Describe and reference visual elements (diagrams, charts, graphs, etc.) found in images to enhance explanations
 Connect visual and textual information: "This diagram supports the explanation in [filename] which states..."
 Use images to support your textual explanations and make them more comprehensive
 When a user asks "what images/photos/figures can you show me" or similar questions, ALWAYS include all relevant images found in the context
+IMPORTANT: When including images in your response, copy the exact markdown image syntax from the context, including the specific imageUrl for that particular image
 Respond in the same language as the user has asked the question in
 Maintain technical terminology in its original language when appropriate
 Focus on directly answering the specific question asked
