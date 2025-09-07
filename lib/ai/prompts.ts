@@ -5,31 +5,56 @@ import type { SearchResult } from '../types';
 export const formatDocumentContext = (similarDocs: SearchResult[]) => {
   let imageCounter = 1;
 
-  return similarDocs
-    .filter((doc) => {
-      // Use lower threshold for images since they might have lower similarity scores with text queries
-      if (doc.metadata.contentType === 'image') {
-        return doc.score > 0.02; // Further lowered threshold to catch more images
-      }
-      return doc.score > 0.25;
-    })
+  const filteredDocs = similarDocs.filter((doc) => {
+    // Use lower threshold for images since they might have lower similarity scores with text queries
+    if (doc.metadata.contentType === 'image') {
+      return doc.score > 0.02; // Further lowered threshold to catch more images
+    }
+    return doc.score > 0.25;
+  });
+
+  // Check if we have any images to provide explicit guidance to the AI
+  const hasImages = filteredDocs.some(
+    (doc) => doc.metadata.contentType === 'image' && doc.metadata.imageUrl,
+  );
+
+  const contextContent = filteredDocs
     .map((doc) => {
       const header = `Source: ${doc.metadata.filename} (Page ${doc.metadata.page || 'N/A'})`;
 
       if (doc.metadata.contentType === 'image' && doc.metadata.imageUrl) {
         // Include the image itself when available with description
         const imageDescription = doc.metadata.content || 'Image from document';
-        const uniqueImageId = `image_${imageCounter}`;
-        const uniqueImageAlt = `${uniqueImageId}_${doc.metadata.filename}_page_${doc.metadata.page || 'unknown'}`;
+        const uniqueImageId = `Figure ${imageCounter}`;
+
+        // Clean up filename for better readability
+        const cleanFilename = doc.metadata.filename
+          ? doc.metadata.filename
+              .replace(/\.(pdf|png|jpg|jpeg)$/i, '')
+              .replace(/[^a-zA-Z0-9\s-]/g, ' ')
+              .trim()
+          : 'document';
+
+        const pageInfo = doc.metadata.page
+          ? ` (Page ${doc.metadata.page})`
+          : '';
+        const cleanAlt = `${uniqueImageId} from ${cleanFilename}${pageInfo}`;
 
         imageCounter++;
 
-        return `${header}\n${imageDescription}\n\n![${uniqueImageAlt}: ${imageDescription}](${doc.metadata.imageUrl})\n\n*This image (${uniqueImageId}) shows visual content from the document that can help illustrate the concepts being discussed.*`;
+        return `${header}\n${imageDescription}\n\n![${cleanAlt}](${doc.metadata.imageUrl})\n\n*${uniqueImageId} shows visual content from the document that illustrates the concepts being discussed.*`;
       }
 
       return `${header}\n${doc.metadata.content || ''}`;
     })
     .join('\n\n---\n\n');
+
+  // Add explicit image availability information to help the AI
+  const imageAvailabilityNote = hasImages
+    ? '\n\n[IMAGE_AVAILABILITY: Images are available in this context - you can display them]'
+    : '\n\n[IMAGE_AVAILABILITY: No images are available in this context - do not reference or display any images]';
+
+  return contextContent + imageAvailabilityNote;
 };
 
 export const artifactsPrompt = `
@@ -115,15 +140,24 @@ If the information is insufficient to fully answer the question, clearly state w
 Cite specific sections or pages when referencing information
 Format responses with headers, subheaders, etc. in markdown to ensure readability and professional presentation
 Return all equations in LaTeX format: Inline equations with single dollar signs $equation$, Display equations with double dollar signs $equation$
-When images are included in the context, ALWAYS display them inline with your response and refer to them when explaining concepts
-CRITICAL: If the user asks about images, figures, diagrams, or visual content, you MUST include the actual images in your response using the provided markdown syntax
-CRITICAL: When referencing images in your response, you MUST use the EXACT imageUrl provided for each specific image in the context. Each image has a unique identifier (image_1, image_2, etc.) - make sure to match the correct URL with the correct description.
-Reference visual elements: "As illustrated in Figure X..." or "The provided diagram shows..."
-Describe and reference visual elements (diagrams, charts, graphs, etc.) found in images to enhance explanations
-Connect visual and textual information: "This diagram supports the explanation in [filename] which states..."
-Use images to support your textual explanations and make them more comprehensive
-When a user asks "what images/photos/figures can you show me" or similar questions, ALWAYS include all relevant images found in the context
-IMPORTANT: When including images in your response, copy the exact markdown image syntax from the context, including the specific imageUrl for that particular image
+CRITICAL IMAGE RULES:
+1. ONLY show images that are explicitly provided in the document context with actual markdown image syntax ![...](url)
+2. NEVER create, invent, or hallucinate image references that are not present in the context
+3. Pay attention to the [IMAGE_AVAILABILITY] note at the end of the context
+4. If the context shows "[IMAGE_AVAILABILITY: No images are available]", clearly state: "No images are available in the provided documents for this topic"
+5. If user asks for images but none are available, respond: "I don't have access to any images related to [topic] in the current documents"
+6. NEVER use phrases like "Here are the images", "I can show you", or "The following images" unless images are actually provided
+
+When images ARE included in the context:
+- ALWAYS display them inline with your response and refer to them when explaining concepts
+- Use the EXACT imageUrl provided for each specific image in the context
+- Each image has a unique identifier (Figure 1, Figure 2, etc.) - match the correct URL with the correct description
+- Reference visual elements: "As illustrated in Figure 1..." or "Figure 2 shows..." or "The diagram in Figure 3 demonstrates..."
+- Describe and reference visual elements (diagrams, charts, graphs, etc.) found in images to enhance explanations
+- Connect visual and textual information: "This diagram supports the explanation in [filename] which states..."
+- When including images in your response, copy the exact markdown image syntax from the context, including the specific imageUrl
+
+NEVER SAY "Here are the images" or "I can show you" unless you actually have images with real URLs in the context
 Respond in the same language as the user has asked the question in
 Maintain technical terminology in its original language when appropriate
 Focus on directly answering the specific question asked
