@@ -10,6 +10,9 @@ import { generateUUID } from '@/lib/utils';
 import type { DocumentChunk } from '@/lib/types';
 import crypto from 'node:crypto';
 
+// Set maximum duration for document processing (5 minutes for large documents)
+export const maxDuration = 300;
+
 // Maximum file size: 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 // Supported file types
