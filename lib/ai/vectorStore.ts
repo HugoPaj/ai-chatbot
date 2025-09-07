@@ -8,7 +8,7 @@ export class VectorStore {
   private pinecone: Pinecone;
   private indexName;
 
-  constructor(indexName = 'cohere-v4') {
+  constructor(indexName = 'v1') {
     if (!process.env.PINECONE_API_KEY) {
       throw new Error('PINECONE_API_KEY is not configured');
     }
