@@ -1,39 +1,40 @@
 import { useState } from 'react';
-import { Upload, FileText, AlertCircle } from 'lucide-react';
+import { Upload, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
+mul;
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/toast';
+
+interface UploadStatus {
+  file: File;
+  status: 'pending' | 'uploading' | 'success' | 'error';
+  message?: string;
+  chunks?: number;
+}
 
 export function RagDocumentUploader() {
   const [isUploading, setIsUploading] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const validateFile = (file: File) => {
     // Check file type
     const supportedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
     if (!supportedTypes.includes(file.type)) {
-      toast({
-        type: 'error',
-        description:
-          'Unsupported file type. Please upload PDF, JPEG, or PNG files only.',
-      });
-      return;
+      return 'Unsupported file type. Please upload PDF, JPEG, or PNG files only.';
     }
 
     // Check file size (10MB max)
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
-      toast({
-        type: 'error',
-        description: 'File too large. Maximum file size is 10MB.',
-      });
-      return;
+      return 'File too large. Maximum file size is 10MB.';
     }
 
-    setIsUploading(true);
+    return null;
+  };
 
+  const uploadSingleFile = async (
+    file: File,
+  ): Promise<{ success: boolean; message: string; chunks?: number }> => {
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -49,23 +50,116 @@ export function RagDocumentUploader() {
       }
 
       const result = await response.json();
-
-      toast({
-        type: 'success',
-        description: `Document uploaded: ${file.name} was successfully processed with ${result.chunks} chunks.`,
-      });
+      return {
+        success: true,
+        message: `Successfully processed with ${result.chunks} chunks`,
+        chunks: result.chunks,
+      };
     } catch (error) {
       console.error('Error uploading document:', error);
+      return {
+        success: false,
+        message:
+          error instanceof Error ? error.message : 'Failed to upload document',
+      };
+    }
+  };
+
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    // Convert FileList to Array and validate all files
+    const fileArray = Array.from(files);
+    const validationErrors: string[] = [];
+
+    fileArray.forEach((file, index) => {
+      const error = validateFile(file);
+      if (error) {
+        validationErrors.push(`${file.name}: ${error}`);
+      }
+    });
+
+    if (validationErrors.length > 0) {
       toast({
         type: 'error',
-        description:
-          error instanceof Error ? error.message : 'Failed to upload document',
+        description: `Validation failed:\n${validationErrors.join('\n')}`,
       });
-    } finally {
-      setIsUploading(false);
-      // Reset the file input
-      event.target.value = '';
+      return;
     }
+
+    // Initialize upload statuses
+    const initialStatuses: UploadStatus[] = fileArray.map((file) => ({
+      file,
+      status: 'pending',
+    }));
+    setUploadStatuses(initialStatuses);
+    setIsUploading(true);
+
+    // Process files sequentially to avoid overwhelming the server
+    const results: UploadStatus[] = [];
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
+
+      // Update status to uploading
+      setUploadStatuses((prev) =>
+        prev.map((status, index) =>
+          index === i ? { ...status, status: 'uploading' } : status,
+        ),
+      );
+
+      const result = await uploadSingleFile(file);
+
+      const newStatus: UploadStatus = {
+        file,
+        status: result.success ? 'success' : 'error',
+        message: result.message,
+        chunks: result.chunks,
+      };
+
+      if (result.success) {
+        successCount++;
+      } else {
+        errorCount++;
+      }
+
+      results.push(newStatus);
+
+      // Update status with result
+      setUploadStatuses((prev) =>
+        prev.map((status, index) => (index === i ? newStatus : status)),
+      );
+    }
+
+    // Show final summary toast
+    if (successCount > 0 && errorCount === 0) {
+      toast({
+        type: 'success',
+        description: `Successfully uploaded ${successCount} document${successCount > 1 ? 's' : ''}`,
+      });
+    } else if (successCount > 0 && errorCount > 0) {
+      toast({
+        type: 'success',
+        description: `${successCount} of ${fileArray.length} documents uploaded successfully`,
+      });
+    } else {
+      toast({
+        type: 'error',
+        description: `Failed to upload ${errorCount} document${errorCount > 1 ? 's' : ''}`,
+      });
+    }
+
+    setIsUploading(false);
+    // Reset the file input
+    event.target.value = '';
+
+    // Clear statuses after a delay to let user see the results
+    setTimeout(() => {
+      setUploadStatuses([]);
+    }, 5000);
   };
 
   return (
@@ -88,9 +182,9 @@ export function RagDocumentUploader() {
           <p>
             Upload documents (PDF, JPEG, PNG) to enhance the AI&apos;s
             knowledge. The AI will reference these documents when answering your
-            questions.
+            questions. You can select multiple files at once for batch upload.
           </p>
-          <p className="mt-1">Maximum file size: 10MB</p>
+          <p className="mt-1">Maximum file size: 10MB per file</p>
         </div>
       )}
 
@@ -102,6 +196,7 @@ export function RagDocumentUploader() {
           onChange={handleUpload}
           accept=".pdf,.jpg,.jpeg,.png"
           disabled={isUploading}
+          multiple
         />
         <Button
           variant="outline"
@@ -110,17 +205,67 @@ export function RagDocumentUploader() {
         >
           {isUploading ? (
             <>
-              <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+              <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
               Uploading...
             </>
           ) : (
             <>
               <Upload className="h-4 w-4 mr-2" />
-              Upload Document
+              Upload Documents
             </>
           )}
         </Button>
       </div>
+
+      {/* Upload Progress Display */}
+      {uploadStatuses.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">
+            Upload Progress (
+            {uploadStatuses.filter((s) => s.status === 'success').length}/
+            {uploadStatuses.length} completed)
+          </div>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {uploadStatuses.map((status) => (
+              <div
+                key={`${status.file.name}-${status.file.size}-${status.file.lastModified}`}
+                className="flex items-center gap-2 p-2 bg-muted/50 rounded text-xs"
+              >
+                <div className="flex-shrink-0">
+                  {status.status === 'pending' && (
+                    <div className="h-3 w-3 rounded-full bg-gray-300" />
+                  )}
+                  {status.status === 'uploading' && (
+                    <div className="h-3 w-3 rounded-full bg-blue-500 animate-pulse" />
+                  )}
+                  {status.status === 'success' && (
+                    <CheckCircle className="h-3 w-3 text-green-500" />
+                  )}
+                  {status.status === 'error' && (
+                    <XCircle className="h-3 w-3 text-red-500" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="truncate font-medium">{status.file.name}</div>
+                  {status.message && (
+                    <div
+                      className={`text-xs ${
+                        status.status === 'success'
+                          ? 'text-green-600'
+                          : status.status === 'error'
+                            ? 'text-red-600'
+                            : 'text-muted-foreground'
+                      }`}
+                    >
+                      {status.message}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
