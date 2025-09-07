@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Upload, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
-mul;
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/toast';
 
