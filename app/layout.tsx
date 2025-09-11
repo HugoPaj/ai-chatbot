@@ -9,8 +9,8 @@ import { SessionProvider } from 'next-auth/react';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://comillas.vercel.app'),
-  title: 'IA ICAI Comillas',
-  description: 'Un asistente IA para la Universidad Comillas ICAI.',
+  title: 'IA Comillas',
+  description: 'Un asistente IA para la Universidad Pontificia Comillas.',
 };
 
 export const viewport = {
