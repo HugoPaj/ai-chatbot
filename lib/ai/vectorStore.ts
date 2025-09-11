@@ -373,4 +373,133 @@ export class VectorStore {
       throw error;
     }
   }
+
+  /**
+   * Delete all vectors belonging to a specific file
+   * @param filename The name of the file to delete (e.g., "document.pdf")
+   * @returns Promise<boolean> True if deletion was successful
+   */
+  async deleteDocumentsByFilename(filename: string): Promise<boolean> {
+    try {
+      console.log(`🗑️ Deleting all vectors for file: ${filename}`);
+      const index = this.pinecone.index(this.indexName);
+
+      // Delete all vectors with matching filename in metadata
+      await index.deleteMany({
+        filter: { filename: { $eq: filename } },
+      });
+
+      console.log(`✅ Successfully deleted all vectors for file: ${filename}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Error deleting vectors for file ${filename}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get statistics about the stored documents
+   * @returns Promise with index statistics including total vector count
+   */
+  async getIndexStats(): Promise<any> {
+    try {
+      const index = this.pinecone.index(this.indexName);
+      const stats = await index.describeIndexStats();
+      return stats;
+    } catch (error) {
+      console.error('Error getting index stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all blob URLs associated with a specific filename
+   * @param filename The filename to search for
+   * @returns Promise<string[]> Array of blob URLs
+   */
+  async getBlobUrlsForFile(filename: string): Promise<string[]> {
+    try {
+      console.log(`📋 Retrieving blob URLs for file: ${filename}`);
+      const index = this.pinecone.index(this.indexName);
+
+      // Create a dummy embedding to query (we just want metadata, not similarity)
+      const dummyEmbedding = new Array(1536).fill(0);
+
+      // Query with high topK and filter by filename to get all chunks for this file
+      const queryResponse = await index.query({
+        vector: dummyEmbedding,
+        topK: 1000, // Get up to 1000 results to find all chunks
+        includeMetadata: true,
+        includeValues: false,
+        filter: { filename: { $eq: filename } },
+      });
+
+      // Extract unique blob URLs from the results
+      const blobUrlsSet = new Set<string>();
+
+      if (queryResponse.matches) {
+        for (const match of queryResponse.matches) {
+          if (
+            match.metadata?.imageUrl &&
+            typeof match.metadata.imageUrl === 'string'
+          ) {
+            blobUrlsSet.add(match.metadata.imageUrl);
+          }
+        }
+      }
+
+      const blobUrls = Array.from(blobUrlsSet);
+      console.log(
+        `📋 Found ${blobUrls.length} blob URLs for file: ${filename}`,
+      );
+
+      return blobUrls;
+    } catch (error) {
+      console.error(`Error getting blob URLs for file ${filename}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * List all unique filenames stored in the vector database
+   * Note: This is a workaround since Pinecone doesn't have a direct way to list metadata values
+   * We query with a dummy vector and high topK to get samples of stored documents
+   * @returns Promise<string[]> Array of unique filenames
+   */
+  async listStoredFiles(): Promise<string[]> {
+    try {
+      console.log('📋 Retrieving list of stored files...');
+      const index = this.pinecone.index(this.indexName);
+
+      // Create a dummy embedding to query (we just want metadata, not similarity)
+      const dummyEmbedding = new Array(1536).fill(0);
+
+      // Query with high topK to get a sample of stored documents
+      const queryResponse = await index.query({
+        vector: dummyEmbedding,
+        topK: 1000, // Get up to 1000 results to find unique filenames
+        includeMetadata: true,
+        includeValues: false,
+      });
+
+      // Extract unique filenames from the results
+      const filenamesSet = new Set<string>();
+
+      if (queryResponse.matches) {
+        for (const match of queryResponse.matches) {
+          if (match.metadata?.filename) {
+            filenamesSet.add(match.metadata.filename as string);
+          }
+        }
+      }
+
+      const filenames = Array.from(filenamesSet).sort();
+      console.log(`📋 Found ${filenames.length} unique files in the database`);
+
+      return filenames;
+    } catch (error) {
+      console.error('Error listing stored files:', error);
+      throw error;
+    }
+  }
 }

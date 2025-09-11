@@ -1,12 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Upload,
   AlertCircle,
   CheckCircle,
   XCircle,
   FileText,
+  Trash2,
+  RefreshCw,
+  Database,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/toast';
@@ -26,10 +29,104 @@ interface UploadStatus {
   chunks?: number;
 }
 
+interface StoredFile {
+  filename: string;
+  isDeleting?: boolean;
+}
+
 export function DocumentUploadPopup() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [open, setOpen] = useState(false);
+  const [storedFiles, setStoredFiles] = useState<StoredFile[]>([]);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+
+  // Load stored files when sheet opens
+  useEffect(() => {
+    if (open) {
+      loadStoredFiles();
+    }
+  }, [open]);
+
+  const loadStoredFiles = async () => {
+    setIsLoadingFiles(true);
+    try {
+      const response = await fetch('/api/rag-documents/list');
+      if (response.ok) {
+        const data = await response.json();
+        setStoredFiles(data.files.map((filename: string) => ({ filename })));
+      } else {
+        console.error('Failed to load stored files');
+        toast({
+          type: 'error',
+          description: 'Failed to load stored files',
+        });
+      }
+    } catch (error) {
+      console.error('Error loading stored files:', error);
+      toast({
+        type: 'error',
+        description: 'Error loading stored files',
+      });
+    } finally {
+      setIsLoadingFiles(false);
+    }
+  };
+
+  const deleteFile = async (filename: string) => {
+    // Set deleting state
+    setStoredFiles((prev) =>
+      prev.map((file) =>
+        file.filename === filename ? { ...file, isDeleting: true } : file,
+      ),
+    );
+
+    try {
+      const response = await fetch(
+        `/api/rag-documents/delete?filename=${encodeURIComponent(filename)}`,
+        {
+          method: 'DELETE',
+        },
+      );
+
+      if (response.ok) {
+        // Remove from the list
+        setStoredFiles((prev) =>
+          prev.filter((file) => file.filename !== filename),
+        );
+        toast({
+          type: 'success',
+          description: `Successfully deleted "${filename}"`,
+        });
+      } else {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete file');
+      }
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      toast({
+        type: 'error',
+        description:
+          error instanceof Error ? error.message : 'Failed to delete file',
+      });
+      // Remove deleting state on error
+      setStoredFiles((prev) =>
+        prev.map((file) =>
+          file.filename === filename ? { ...file, isDeleting: false } : file,
+        ),
+      );
+    }
+  };
+
+  const confirmDelete = (filename: string) => {
+    if (
+      window.confirm(
+        `Are you sure you want to delete "${filename}"? This action cannot be undone.`,
+      )
+    ) {
+      deleteFile(filename);
+    }
+  };
 
   const validateFile = (file: File) => {
     // Check file type
@@ -171,6 +268,11 @@ export function DocumentUploadPopup() {
     // Reset the file input
     event.target.value = '';
 
+    // Refresh stored files list if any uploads succeeded
+    if (successCount > 0) {
+      loadStoredFiles();
+    }
+
     // Clear statuses after a delay to let user see the results
     setTimeout(() => {
       setUploadStatuses([]);
@@ -238,6 +340,74 @@ export function DocumentUploadPopup() {
                 </>
               )}
             </Button>
+          </div>
+
+          {/* Stored Files List */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                <span className="text-sm font-medium">Stored Documents</span>
+                {storedFiles.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    ({storedFiles.length} files)
+                  </span>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={loadStoredFiles}
+                disabled={isLoadingFiles}
+                className="h-7 px-2"
+              >
+                <RefreshCw
+                  className={`h-3 w-3 ${isLoadingFiles ? 'animate-spin' : ''}`}
+                />
+                <span className="sr-only">Refresh</span>
+              </Button>
+            </div>
+
+            {isLoadingFiles ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                Loading stored files...
+              </div>
+            ) : storedFiles.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                No documents stored yet. Upload some files to get started!
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto border rounded-lg">
+                {storedFiles.map((file) => (
+                  <div
+                    key={file.filename}
+                    className="flex items-center justify-between p-3 border-b last:border-b-0 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-sm truncate" title={file.filename}>
+                        {file.filename}
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => confirmDelete(file.filename)}
+                      disabled={file.isDeleting || isUploading}
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                      title={`Delete ${file.filename}`}
+                    >
+                      {file.isDeleting ? (
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3 w-3" />
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Upload Progress Display */}
