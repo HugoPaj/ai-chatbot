@@ -44,41 +44,77 @@ export function SubscriptionDashboard({
   const [loading, setLoading] = useState(false);
 
   const handleUpgrade = async () => {
+    console.log('🚀 handleUpgrade called');
     setLoading(true);
     try {
       // Get the premium price ID from environment or API
       const priceId = process.env.NEXT_PUBLIC_STRIPE_PREMIUM_PRICE_ID;
 
+      console.log('📋 Environment Variables Check:', {
+        priceId: priceId || 'UNDEFINED',
+        publishableKey:
+          process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'UNDEFINED',
+        appUrl: process.env.NEXT_PUBLIC_APP_URL || 'UNDEFINED',
+        nodeEnv: process.env.NODE_ENV,
+        allNextPublicKeys: Object.keys(process.env).filter((key) =>
+          key.startsWith('NEXT_PUBLIC_'),
+        ),
+      });
+
       if (!priceId) {
+        console.error('❌ No price ID found');
         toast.error(
           'Subscription configuration error. Please contact support.',
         );
         return;
       }
 
+      console.log(
+        '✅ Price ID found, making API call to /api/stripe/create-checkout',
+      );
+
+      const requestBody = { priceId };
+      console.log('📤 Request body:', requestBody);
+
       const response = await fetch('/api/stripe/create-checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ priceId }),
+        body: JSON.stringify(requestBody),
       });
 
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Response ok:', response.ok);
+
       if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ API Error:', errorData);
         throw new Error('Failed to create checkout session');
       }
 
-      const { url } = await response.json();
+      const responseData = await response.json();
+      console.log('✅ Success response:', responseData);
+
+      const { url } = responseData;
 
       if (url) {
+        console.log('🔗 Redirecting to:', url);
         window.location.href = url;
       } else {
+        console.error('❌ No checkout URL received');
         throw new Error('No checkout URL received');
       }
     } catch (error) {
-      console.error('Error creating checkout session:', error);
+      console.error('💥 Error in handleUpgrade:', error);
+      console.error('💥 Error type:', typeof error);
+      console.error(
+        '💥 Error message:',
+        error instanceof Error ? error.message : String(error),
+      );
       toast.error('Failed to start subscription process. Please try again.');
     } finally {
+      console.log('🏁 handleUpgrade finished, setting loading to false');
       setLoading(false);
     }
   };
@@ -150,7 +186,6 @@ export function SubscriptionDashboard({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Crown className="h-5 w-5" />
             Current Plan
           </CardTitle>
           <CardDescription>
@@ -226,7 +261,6 @@ export function SubscriptionDashboard({
               disabled={loading}
               className="w-full"
             >
-              <Crown className="h-4 w-4 mr-2" />
               {loading ? 'Loading...' : 'Upgrade to Premium'}
             </Button>
           )}
@@ -238,7 +272,6 @@ export function SubscriptionDashboard({
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
               Premium Benefits
             </CardTitle>
             <CardDescription>
@@ -267,7 +300,6 @@ export function SubscriptionDashboard({
               disabled={loading}
               className="w-full"
             >
-              <Crown className="h-4 w-4 mr-2" />
               Start Premium - $9.99/month
             </Button>
           </CardFooter>
