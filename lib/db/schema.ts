@@ -9,6 +9,7 @@ import {
   primaryKey,
   foreignKey,
   boolean,
+  unique,
 } from 'drizzle-orm/pg-core';
 
 export const user = pgTable('User', {
@@ -168,3 +169,84 @@ export const stream = pgTable(
 );
 
 export type Stream = InferSelectModel<typeof stream>;
+
+// Global application settings
+export const appSettings = pgTable('AppSettings', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  key: varchar('key', { length: 64 }).notNull().unique(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+  updatedBy: uuid('updatedBy')
+    .notNull()
+    .references(() => user.id),
+});
+
+export type AppSettings = InferSelectModel<typeof appSettings>;
+
+// Subscription plans
+export const subscriptionPlan = pgTable('SubscriptionPlan', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  name: varchar('name', { length: 64 }).notNull(),
+  description: text('description'),
+  priceCents: varchar('priceCents', { length: 16 }).notNull(), // Store as string to handle large numbers
+  maxRequestsPerDay: varchar('maxRequestsPerDay', { length: 16 }).notNull(), // -1 for unlimited
+  stripePriceId: varchar('stripePriceId', { length: 128 }),
+  isActive: boolean('isActive').notNull().default(true),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export type SubscriptionPlan = InferSelectModel<typeof subscriptionPlan>;
+
+// User subscriptions
+export const userSubscription = pgTable('UserSubscription', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  planId: uuid('planId')
+    .notNull()
+    .references(() => subscriptionPlan.id),
+  stripeSubscriptionId: varchar('stripeSubscriptionId', { length: 128 }),
+  stripeCustomerId: varchar('stripeCustomerId', { length: 128 }),
+  status: varchar('status', {
+    enum: [
+      'active',
+      'canceled',
+      'incomplete',
+      'incomplete_expired',
+      'past_due',
+      'paused',
+      'trialing',
+      'unpaid',
+    ],
+  }).notNull(),
+  currentPeriodStart: timestamp('currentPeriodStart').notNull(),
+  currentPeriodEnd: timestamp('currentPeriodEnd').notNull(),
+  cancelAtPeriodEnd: boolean('cancelAtPeriodEnd').notNull().default(false),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type UserSubscription = InferSelectModel<typeof userSubscription>;
+
+// Daily usage tracking
+export const dailyUsage = pgTable(
+  'DailyUsage',
+  {
+    id: uuid('id').primaryKey().notNull().defaultRandom(),
+    userId: uuid('userId')
+      .notNull()
+      .references(() => user.id),
+    date: varchar('date', { length: 10 }).notNull(), // YYYY-MM-DD format
+    requestCount: varchar('requestCount', { length: 16 })
+      .notNull()
+      .default('0'),
+    createdAt: timestamp('createdAt').notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueUserDate: unique().on(table.userId, table.date),
+  }),
+);
+
+export type DailyUsage = InferSelectModel<typeof dailyUsage>;

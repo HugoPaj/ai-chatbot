@@ -27,6 +27,12 @@ import {
   type DBMessage,
   type Chat,
   stream,
+  appSettings,
+  subscriptionPlan,
+  type SubscriptionPlan,
+  userSubscription,
+  type UserSubscription,
+  dailyUsage,
 } from './schema';
 import type { ArtifactKind } from '@/components/artifact';
 import { generateUUID } from '../utils';
@@ -533,6 +539,197 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
     throw new ChatSDKError(
       'bad_request:database',
       'Failed to get stream ids by chat id',
+    );
+  }
+}
+
+// Global settings functions
+export async function getAppSetting(key: string): Promise<string | null> {
+  try {
+    const setting = await db
+      .select({ value: appSettings.value })
+      .from(appSettings)
+      .where(eq(appSettings.key, key))
+      .limit(1)
+      .execute();
+
+    return setting[0]?.value ?? null;
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to get app setting');
+  }
+}
+
+export async function setAppSetting({
+  key,
+  value,
+  updatedBy,
+}: {
+  key: string;
+  value: string;
+  updatedBy: string;
+}): Promise<void> {
+  try {
+    await db
+      .insert(appSettings)
+      .values({ key, value, updatedBy, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value, updatedBy, updatedAt: new Date() },
+      })
+      .execute();
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to set app setting');
+  }
+}
+
+// Paywall control functions
+export async function isPaywallEnabled(): Promise<boolean> {
+  try {
+    const enabled = await getAppSetting('paywall_enabled');
+    return enabled === 'true';
+  } catch (error) {
+    // Default to enabled if setting doesn't exist
+    return true;
+  }
+}
+
+export async function setPaywallEnabled(
+  enabled: boolean,
+  updatedBy: string,
+): Promise<void> {
+  await setAppSetting({
+    key: 'paywall_enabled',
+    value: enabled.toString(),
+    updatedBy,
+  });
+}
+
+// Daily usage tracking functions
+export async function getDailyUsage({
+  userId,
+  date,
+}: {
+  userId: string;
+  date: string; // YYYY-MM-DD format
+}): Promise<number> {
+  try {
+    const usage = await db
+      .select({ requestCount: dailyUsage.requestCount })
+      .from(dailyUsage)
+      .where(and(eq(dailyUsage.userId, userId), eq(dailyUsage.date, date)))
+      .limit(1)
+      .execute();
+
+    return Number.parseInt(usage[0]?.requestCount ?? '0', 10);
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to get daily usage');
+  }
+}
+
+export async function incrementDailyUsage({
+  userId,
+  date,
+}: {
+  userId: string;
+  date: string; // YYYY-MM-DD format
+}): Promise<void> {
+  try {
+    // First, try to get existing usage
+    const existing = await db
+      .select()
+      .from(dailyUsage)
+      .where(and(eq(dailyUsage.userId, userId), eq(dailyUsage.date, date)))
+      .limit(1);
+
+    if (existing.length > 0) {
+      // Update existing record
+      const currentCount = Number.parseInt(existing[0].requestCount, 10);
+      await db
+        .update(dailyUsage)
+        .set({
+          requestCount: (currentCount + 1).toString(),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(dailyUsage.userId, userId), eq(dailyUsage.date, date)));
+    } else {
+      // Insert new record
+      await db.insert(dailyUsage).values({
+        userId,
+        date,
+        requestCount: '1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+  } catch (error) {
+    console.error('Error incrementing daily usage:', error);
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to increment daily usage',
+    );
+  }
+}
+
+// Subscription functions
+export async function getUserSubscription(
+  userId: string,
+): Promise<UserSubscription | null> {
+  try {
+    const subscription = await db
+      .select()
+      .from(userSubscription)
+      .where(
+        and(
+          eq(userSubscription.userId, userId),
+          eq(userSubscription.status, 'active'),
+        ),
+      )
+      .limit(1)
+      .execute();
+
+    return subscription[0] ?? null;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user subscription',
+    );
+  }
+}
+
+export async function getSubscriptionPlan(
+  planId: string,
+): Promise<SubscriptionPlan | null> {
+  try {
+    const plan = await db
+      .select()
+      .from(subscriptionPlan)
+      .where(eq(subscriptionPlan.id, planId))
+      .limit(1)
+      .execute();
+
+    return plan[0] ?? null;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get subscription plan',
+    );
+  }
+}
+
+export async function getActiveSubscriptionPlans(): Promise<
+  SubscriptionPlan[]
+> {
+  try {
+    return await db
+      .select()
+      .from(subscriptionPlan)
+      .where(eq(subscriptionPlan.isActive, true))
+      .orderBy(asc(subscriptionPlan.priceCents))
+      .execute();
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get active subscription plans',
     );
   }
 }

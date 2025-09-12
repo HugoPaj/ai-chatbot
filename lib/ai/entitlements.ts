@@ -16,14 +16,26 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
   },
 
   /*
-   * For users with an account
+   * For users with an account but no subscription
    */
-  regular: {
-    maxMessagesPerDay: 100,
+  free: {
+    maxMessagesPerDay: 5,
     availableChatModelIds: ['chat-model', 'chat-model-reasoning'],
   },
 
   /*
-   * TODO: For users with an account and a paid membership
+   * For users with a paid subscription
    */
+  premium: {
+    maxMessagesPerDay: -1, // Unlimited
+    availableChatModelIds: ['chat-model', 'chat-model-reasoning'],
+  },
+
+  /*
+   * For admin users - unlimited access
+   */
+  admin: {
+    maxMessagesPerDay: -1, // Unlimited
+    availableChatModelIds: ['chat-model', 'chat-model-reasoning'],
+  },
 };

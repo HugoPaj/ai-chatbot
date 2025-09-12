@@ -6,7 +6,7 @@ import {
   streamText,
 } from 'ai';
 import type { SearchResult } from '@/lib/types';
-import { auth, type UserType } from '@/app/(auth)/auth';
+import { auth } from '@/app/(auth)/auth';
 import {
   type RequestHints,
   systemPrompt,
@@ -17,11 +17,13 @@ import {
   createStreamId,
   deleteChatById,
   getChatById,
-  getMessageCountByUserId,
   getMessagesByChatId,
   saveChat,
   saveMessages,
+  getDailyUsage,
+  incrementDailyUsage,
 } from '@/lib/db/queries';
+import { canUserMakeRequest } from '@/lib/ai/user-entitlements';
 import { generateUUID, getTrailingMessageId } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
 import { createDocument } from '@/lib/ai/tools/create-document';
@@ -97,15 +99,25 @@ export async function POST(request: Request) {
       return new ChatSDKError('unauthorized:chat').toResponse();
     }
 
-    const userType: UserType = session.user.type;
+    // Get current date for daily usage tracking
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
 
-    const messageCount = await getMessageCountByUserId({
-      id: session.user.id,
-      differenceInHours: 24,
+    // Get daily usage for the user
+    const dailyUsage = await getDailyUsage({
+      userId: session.user.id,
+      date: today,
     });
 
-    if (messageCount > entitlementsByUserType[userType].maxMessagesPerDay) {
-      return new ChatSDKError('rate_limit:chat').toResponse();
+    // Check if user can make this request
+    const { canMakeRequest, reason } = await canUserMakeRequest(
+      session,
+      dailyUsage,
+    );
+
+    if (!canMakeRequest) {
+      const error = new ChatSDKError('rate_limit:chat');
+      error.message = reason || 'Daily request limit exceeded';
+      return error.toResponse();
     }
 
     const chat = await getChatById({ id });
@@ -155,6 +167,12 @@ export async function POST(request: Request) {
           createdAt: new Date(),
         },
       ],
+    });
+
+    // Increment daily usage count
+    await incrementDailyUsage({
+      userId: session.user.id,
+      date: today,
     });
 
     const streamId = generateUUID();

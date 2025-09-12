@@ -86,7 +86,7 @@ The Node.js DocumentProcessor automatically detects if this service is running a
 - **PORT**: Service port (default: 8001)
 - **CORS**: Configured for localhost:3000 and localhost:3001
 
-## Monitoring
+## Monitoring 
 
 - Health check endpoint: `/health`
 - Docker health checks included

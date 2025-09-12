@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { guestRegex, isDevelopmentEnvironment } from './lib/constants';
+import { isAdminEmail } from './lib/auth/admin';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -14,6 +15,11 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith('/api/auth')) {
+    return NextResponse.next();
+  }
+
+  // Allow Stripe webhook to bypass auth (but not admin endpoints)
+  if (pathname.startsWith('/api/stripe/webhook')) {
     return NextResponse.next();
   }
 
@@ -32,18 +38,69 @@ export async function middleware(request: NextRequest) {
   }
 
   const isGuest = guestRegex.test(token?.email ?? '');
+  const userEmail = token?.email ?? '';
+  const isAdmin = isAdminEmail(userEmail);
 
+  // Redirect authenticated non-guest users away from auth pages
   if (token && !isGuest && ['/login', '/register'].includes(pathname)) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
-  return NextResponse.next();
+  // Protect dashboard route - only allow authenticated non-guest users
+  if (pathname === '/dashboard') {
+    if (!token || isGuest) {
+      const redirectUrl = encodeURIComponent(request.url);
+      return NextResponse.redirect(
+        new URL(`/login?redirectUrl=${redirectUrl}`, request.url),
+      );
+    }
+  }
+
+  // Protect admin API routes - only allow admin users
+  if (pathname.startsWith('/api/admin') && !isAdmin) {
+    console.log(
+      `Admin access denied for email: ${userEmail}, path: ${pathname}`,
+    );
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  // Protect Stripe API routes - require authentication (except webhook)
+  if (
+    pathname.startsWith('/api/stripe') &&
+    !pathname.startsWith('/api/stripe/webhook')
+  ) {
+    if (!token || isGuest) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 },
+      );
+    }
+  }
+
+  // Add user type to request headers for API routes to use
+  const response = NextResponse.next();
+
+  if (token && pathname.startsWith('/api/')) {
+    let userType = token.type as string;
+
+    // Ensure user type is properly set with fallbacks
+    if (!userType) {
+      userType = isAdmin ? 'admin' : isGuest ? 'guest' : 'free';
+    }
+
+    response.headers.set('x-user-id', token.id as string);
+    response.headers.set('x-user-type', userType);
+    response.headers.set('x-user-email', userEmail);
+  }
+
+  return response;
 }
 
 export const config = {
   matcher: [
     '/',
     '/chat/:id',
+    '/dashboard',
     '/api/:path*',
     '/login',
     '/register',

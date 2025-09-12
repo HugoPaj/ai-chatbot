@@ -97,16 +97,17 @@ const components: Partial<Components> = {
   },
   img: ({ node, alt, src, ...props }) => {
     if (!src) return null;
-    
+
     return (
       <div className="my-4 flex flex-col items-center">
         <div className="relative max-w-full border rounded-lg overflow-hidden shadow-sm">
-          <img
+          <Image
             src={src}
             alt={alt || 'Document image'}
+            width={800}
+            height={400}
             className="max-w-full h-auto object-contain"
             style={{ maxHeight: '400px' }}
-            {...props}
           />
         </div>
         {alt && (

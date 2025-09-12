@@ -30,7 +30,11 @@ export function ModelSelector({
     useOptimistic(selectedModelId);
 
   const userType = session.user.type;
-  const { availableChatModelIds } = entitlementsByUserType[userType];
+
+  // Fallback to 'free' if userType is undefined or not found
+  const safeUserType =
+    userType && entitlementsByUserType[userType] ? userType : 'free';
+  const { availableChatModelIds } = entitlementsByUserType[safeUserType];
 
   const availableChatModels = chatModels.filter((chatModel) =>
     availableChatModelIds.includes(chatModel.id),
