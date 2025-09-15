@@ -5,7 +5,7 @@ import type Stripe from 'stripe';
 import { userSubscription, subscriptionPlan } from '@/lib/db/schema';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { eq, and } from 'drizzle-orm';
+import { eq, } from 'drizzle-orm';
 
 // biome-ignore lint: Forbidden non-null assertion.
 const client = postgres(process.env.POSTGRES_URL!);

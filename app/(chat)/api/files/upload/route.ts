@@ -1,4 +1,4 @@
-import { put } from '@vercel/blob';
+import { put } from '@/lib/r2';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
 
     // Get filename from formData since Blob doesn't have name property
     const filename = (formData.get('file') as File).name;
-    const fileBuffer = await file.arrayBuffer();
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
 
     try {
       const data = await put(`${filename}`, fileBuffer, {

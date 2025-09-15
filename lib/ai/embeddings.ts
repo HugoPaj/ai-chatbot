@@ -113,7 +113,7 @@ export class EmbeddingService {
       });
 
       const requestPayload = {
-        model: this.MODEL,
+        model: EmbeddingService.MODEL,
         inputs: formattedInputs,
         input_type: inputType,
       };
@@ -122,7 +122,7 @@ export class EmbeddingService {
         `    🔍 Making embedding request with ${inputArray.length} input(s) of type(s): ${inputArray.map((i) => i.type).join(', ')}`,
       );
 
-      const response = await fetch(this.API_URL, {
+      const response = await fetch(EmbeddingService.API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -139,7 +139,7 @@ export class EmbeddingService {
           const delay = baseDelay * Math.pow(2, retryCount); // Exponential backoff
           console.log(`  Rate limited. Retrying in ${delay / 1000} seconds...`);
           await new Promise((resolve) => setTimeout(resolve, delay));
-          return this.generateMultimodalEmbeddings(
+          return EmbeddingService.generateMultimodalEmbeddings(
             content,
             inputType,
             retryCount + 1,
@@ -169,7 +169,7 @@ export class EmbeddingService {
         const delay = baseDelay * Math.pow(2, retryCount); // Exponential backoff
         console.log(`  Network error. Retrying in ${delay / 1000} seconds...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
-        return this.generateMultimodalEmbeddings(
+        return EmbeddingService.generateMultimodalEmbeddings(
           content,
           inputType,
           retryCount + 1,
@@ -185,7 +185,7 @@ export class EmbeddingService {
     content: MultimodalInput,
     inputType: 'document' | 'query' = 'document',
   ): Promise<number[]> {
-    const embeddings = await this.generateMultimodalEmbeddings(
+    const embeddings = await EmbeddingService.generateMultimodalEmbeddings(
       content,
       inputType,
     );
@@ -199,7 +199,7 @@ export class EmbeddingService {
     }
 
     // Remove control characters and problematic Unicode
-    let cleaned = text
+    const cleaned = text
       // Remove null bytes and control characters (except tabs and newlines)
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
       // Remove private use Unicode characters that cause API issues
@@ -233,7 +233,7 @@ export class EmbeddingService {
     }
 
     // Clean the text to ensure API compatibility
-    const cleanedText = this.cleanTextForAPI(text);
+    const cleanedText = EmbeddingService.cleanTextForAPI(text);
 
     if (!cleanedText || cleanedText.length < 10) {
       throw new Error(
@@ -252,7 +252,7 @@ export class EmbeddingService {
     const maxLength = 32000; // Conservative limit for Voyage API
     const finalText =
       cleanedText.length > maxLength
-        ? cleanedText.substring(0, maxLength) + '...'
+        ? `${cleanedText.substring(0, maxLength)}...`
         : cleanedText;
 
     if (cleanedText.length > maxLength) {
@@ -261,7 +261,7 @@ export class EmbeddingService {
       );
     }
 
-    return this.generateSingleEmbedding(
+    return EmbeddingService.generateSingleEmbedding(
       { type: 'text', text: finalText },
       inputType,
     );
@@ -273,9 +273,9 @@ export class EmbeddingService {
     inputType: 'document' | 'query' = 'document',
   ): Promise<number[]> {
     // Validate and clean base64 image data
-    const cleanImageData = this.validateAndCleanBase64Image(imageBase64);
+    const cleanImageData = EmbeddingService.validateAndCleanBase64Image(imageBase64);
     
-    return this.generateSingleEmbedding(
+    return EmbeddingService.generateSingleEmbedding(
       { type: 'image', image: cleanImageData },
       inputType,
     );

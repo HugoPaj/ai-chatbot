@@ -82,9 +82,9 @@ export function AdminPaywallToggle({ isAdmin }: PaywallToggleProps) {
       <div className="flex items-center justify-between space-x-2">
         <div className="flex items-center space-x-2">
           {paywallEnabled ? (
-            <Shield className="h-4 w-4 text-green-600" />
+            <Shield className="size-4 text-green-600" />
           ) : (
-            <ShieldOff className="h-4 w-4 text-orange-600" />
+            <ShieldOff className="size-4 text-orange-600" />
           )}
           <Label htmlFor="paywall-toggle" className="text-xs font-medium">
             Paywall

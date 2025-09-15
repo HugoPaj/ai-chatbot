@@ -23,14 +23,14 @@ const getFileIcon = (filename: string) => {
 
   switch (extension) {
     case 'pdf':
-      return <FileTextIcon className="h-4 w-4 text-red-500" />;
+      return <FileTextIcon className="size-4 text-red-500" />;
     case 'jpg':
     case 'jpeg':
     case 'png':
     case 'gif':
-      return <ImageIcon className="h-4 w-4 text-blue-500" />;
+      return <ImageIcon className="size-4 text-blue-500" />;
     default:
-      return <BookOpenIcon className="h-4 w-4 text-gray-500" />;
+      return <BookOpenIcon className="size-4 text-gray-500" />;
   }
 };
 
@@ -122,11 +122,11 @@ export function SourcesDisplay({ sources, className }: SourcesDisplayProps) {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5">
               {isExpanded ? (
-                <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
+                <ChevronDownIcon className="size-4 text-muted-foreground" />
               ) : (
-                <ChevronRightIcon className="h-4 w-4 text-muted-foreground" />
+                <ChevronRightIcon className="size-4 text-muted-foreground" />
               )}
-              <BookOpenIcon className="h-4 w-4 text-muted-foreground" />
+              <BookOpenIcon className="size-4 text-muted-foreground" />
             </div>
             <span className="text-sm text-muted-foreground">Sources used</span>
             <Badge variant="secondary" className="ml-2 text-xs">
@@ -143,7 +143,7 @@ export function SourcesDisplay({ sources, className }: SourcesDisplayProps) {
                 key={source}
                 className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors duration-150 group"
               >
-                <div className="flex-shrink-0">{getFileIcon(source)}</div>
+                <div className="shrink-0">{getFileIcon(source)}</div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
                     {extractDisplayName(source)}
@@ -152,7 +152,7 @@ export function SourcesDisplay({ sources, className }: SourcesDisplayProps) {
                     {source}
                   </p>
                 </div>
-                <div className="flex-shrink-0">
+                <div className="shrink-0">
                   <Badge variant="outline" className="text-xs">
                     #{index + 1}
                   </Badge>

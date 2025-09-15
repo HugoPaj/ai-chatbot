@@ -14,7 +14,6 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import {
-  Crown,
   CreditCard,
   Calendar,
   CheckCircle,
@@ -211,7 +210,7 @@ export function SubscriptionDashboard({
 
           {subscription.isSubscribed && subscription.currentPeriodEnd && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="h-4 w-4" />
+              <Calendar className="size-4" />
               <span>
                 {subscription.cancelAtPeriodEnd ? 'Expires' : 'Renews'} on{' '}
                 {formatDate(subscription.currentPeriodEnd)}
@@ -251,9 +250,9 @@ export function SubscriptionDashboard({
               variant="outline"
               className="w-full"
             >
-              <CreditCard className="h-4 w-4 mr-2" />
+              <CreditCard className="size-4 mr-2" />
               Manage Subscription
-              <ExternalLink className="h-4 w-4 ml-2" />
+              <ExternalLink className="size-4 ml-2" />
             </Button>
           ) : (
             <Button
@@ -288,7 +287,7 @@ export function SubscriptionDashboard({
                 'Early access to new features',
               ].map((benefit) => (
                 <li key={benefit} className="flex items-center gap-2 text-sm">
-                  <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <CheckCircle className="size-4 text-green-600 shrink-0" />
                   <span>{benefit}</span>
                 </li>
               ))}
@@ -313,7 +312,7 @@ export function SubscriptionDashboard({
           <Card className="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-orange-800 dark:text-orange-200">
-                <AlertCircle className="h-5 w-5" />
+                <AlertCircle className="size-5" />
                 Subscription Ending
               </CardTitle>
             </CardHeader>

@@ -50,7 +50,7 @@ export async function GET() {
           score: doc.score,
           filename: doc.metadata.filename,
           page: doc.metadata.page,
-          content: doc.metadata.content?.substring(0, 150) + '...',
+          content: `${doc.metadata.content?.substring(0, 150)}...`,
         })),
         formattedContext:
           imageResults.length > 0 ? formatDocumentContext(searchResults) : null,

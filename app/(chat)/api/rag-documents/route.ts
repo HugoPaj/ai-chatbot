@@ -1,7 +1,7 @@
 import { auth } from '@/app/(auth)/auth';
 import { VectorStore } from '@/lib/ai/vectorStore';
 import { DocumentProcessor } from '@/lib/ai/documentProcessor';
-import { put } from '@vercel/blob';
+import { put } from '@/lib/r2';
 import { ChatSDKError } from '@/lib/errors';
 import path from 'node:path';
 import fs from 'node:fs';

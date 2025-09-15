@@ -1,6 +1,6 @@
 import { compare } from 'bcrypt-ts';
 import NextAuth, { type DefaultSession } from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
+import type { Provider } from 'next-auth/providers';
 import { createGuestUser, getUser } from '@/lib/db/queries';
 import { authConfig } from './auth.config';
 import { DUMMY_PASSWORD } from '@/lib/constants';
@@ -39,7 +39,10 @@ export const {
 } = NextAuth({
   ...authConfig,
   providers: [
-    Credentials({
+    {
+      id: 'credentials',
+      name: 'Credentials',
+      type: 'credentials',
       credentials: {},
       async authorize({ email, password }: any) {
         const users = await getUser(email);
@@ -66,16 +69,18 @@ export const {
 
         return { ...user, type: userType };
       },
-    }),
-    Credentials({
+    },
+    {
       id: 'guest',
+      name: 'Guest',
+      type: 'credentials',
       credentials: {},
       async authorize() {
         const [guestUser] = await createGuestUser();
         return { ...guestUser, type: 'guest' };
       },
-    }),
-  ],
+    },
+  ] as Provider[],
   callbacks: {
     async jwt({ token, user }) {
       if (user) {

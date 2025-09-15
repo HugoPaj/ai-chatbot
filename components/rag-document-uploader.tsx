@@ -168,11 +168,11 @@ export function RagDocumentUploader() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7"
+          className="size-7"
           onClick={() => setShowInfo(!showInfo)}
           title="About Document Knowledge Base"
         >
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle className="size-4" />
         </Button>
       </div>
 
@@ -191,7 +191,7 @@ export function RagDocumentUploader() {
         <input
           type="file"
           id="rag-document-upload"
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          className="absolute inset-0 size-full opacity-0 cursor-pointer"
           onChange={handleUpload}
           accept=".pdf,.jpg,.jpeg,.png"
           disabled={isUploading}
@@ -204,12 +204,12 @@ export function RagDocumentUploader() {
         >
           {isUploading ? (
             <>
-              <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              <div className="size-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
               Uploading...
             </>
           ) : (
             <>
-              <Upload className="h-4 w-4 mr-2" />
+              <Upload className="size-4 mr-2" />
               Upload Documents
             </>
           )}
@@ -230,18 +230,18 @@ export function RagDocumentUploader() {
                 key={`${status.file.name}-${status.file.size}-${status.file.lastModified}`}
                 className="flex items-center gap-2 p-2 bg-muted/50 rounded text-xs"
               >
-                <div className="flex-shrink-0">
+                <div className="shrink-0">
                   {status.status === 'pending' && (
-                    <div className="h-3 w-3 rounded-full bg-gray-300" />
+                    <div className="size-3 rounded-full bg-gray-300" />
                   )}
                   {status.status === 'uploading' && (
-                    <div className="h-3 w-3 rounded-full bg-blue-500 animate-pulse" />
+                    <div className="size-3 rounded-full bg-blue-500 animate-pulse" />
                   )}
                   {status.status === 'success' && (
-                    <CheckCircle className="h-3 w-3 text-green-500" />
+                    <CheckCircle className="size-3 text-green-500" />
                   )}
                   {status.status === 'error' && (
-                    <XCircle className="h-3 w-3 text-red-500" />
+                    <XCircle className="size-3 text-red-500" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">

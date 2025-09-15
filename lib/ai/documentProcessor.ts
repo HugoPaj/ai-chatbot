@@ -217,35 +217,35 @@ const processWithDocling = async (
             }
           : undefined;
 
-        // Store image chunks in Vercel Blob (for serverless environments)
+        // Store image chunks in Cloudflare R2 (for serverless environments)
         let imageUrl: string | undefined;
         if (chunk.content_type === 'image' && chunk.image_data) {
           console.log(
-            `    🖼️  [BLOB DEBUG] Processing image chunk ${index + 1}`,
+            `    🖼️  [R2 DEBUG] Processing image chunk ${index + 1}`,
           );
           console.log(
-            `    🖼️  [BLOB DEBUG] Image data length: ${chunk.image_data.length} chars`,
+            `    🖼️  [R2 DEBUG] Image data length: ${chunk.image_data.length} chars`,
           );
           console.log(
-            `    🖼️  [BLOB DEBUG] BLOB_READ_WRITE_TOKEN present: ${!!process.env.BLOB_READ_WRITE_TOKEN}`,
+            `    🖼️  [R2 DEBUG] R2 config present: ${!!process.env.R2_ACCOUNT_ID}`,
           );
 
           try {
-            // Try to import Vercel Blob
+            // Try to import R2 utility
             console.log(
-              `    🔧 [BLOB DEBUG] Attempting to import @vercel/blob...`,
+              `    🔧 [R2 DEBUG] Attempting to import R2 utility...`,
             );
-            const { put } = await import('@vercel/blob');
+            const { put } = await import('@/lib/r2');
             console.log(
-              `    ✅ [BLOB DEBUG] Successfully imported @vercel/blob`,
+              `    ✅ [R2 DEBUG] Successfully imported R2 utility`,
             );
 
-            // Check if BLOB_READ_WRITE_TOKEN is available
-            if (!process.env.BLOB_READ_WRITE_TOKEN) {
+            // Check if R2 config is available
+            if (!process.env.R2_ACCOUNT_ID || !process.env.R2_ACCESS_KEY_ID) {
               console.warn(
-                `    ⚠️  [BLOB DEBUG] BLOB_READ_WRITE_TOKEN environment variable not found - using fallback`,
+                `    ⚠️  [R2 DEBUG] R2 configuration not found - using fallback`,
               );
-              throw new Error('BLOB_READ_WRITE_TOKEN not available');
+              throw new Error('R2 configuration not available');
             }
 
             const imageHash = crypto
@@ -256,61 +256,66 @@ const processWithDocling = async (
             const imageFileName = `doc-images/${imageHash}.png`;
 
             console.log(
-              `    🔧 [BLOB DEBUG] Generated filename: ${imageFileName}`,
+              `    🔧 [R2 DEBUG] Generated filename: ${imageFileName}`,
             );
-            console.log(`    🔧 [BLOB DEBUG] Image hash: ${imageHash}`);
+            console.log(`    🔧 [R2 DEBUG] Image hash: ${imageHash}`);
 
-            // Upload to Vercel Blob
+            // Upload to Cloudflare R2
             const imageBuffer = Buffer.from(chunk.image_data, 'base64');
             console.log(
-              `    🔧 [BLOB DEBUG] Buffer size: ${imageBuffer.length} bytes`,
+              `    🔧 [R2 DEBUG] Buffer size: ${imageBuffer.length} bytes`,
             );
 
-            console.log(`    🚀 [BLOB DEBUG] Starting blob upload...`);
-            const blob = await put(imageFileName, imageBuffer, {
-              access: 'public',
-              contentType: 'image/png', // PDF extracted images are always PNG
-            });
-            console.log(`    ✅ [BLOB DEBUG] Blob upload successful!`);
-            console.log(
-              `    ✅ [BLOB DEBUG] Blob response:`,
-              JSON.stringify(blob, null, 2),
-            );
+            console.log(`    🚀 [R2 DEBUG] Starting R2 upload...`);
+            try {
+              const r2Response = await put(imageFileName, imageBuffer, {
+                access: 'public',
+                contentType: 'image/png', // PDF extracted images are always PNG
+              });
+              console.log(`    ✅ [R2 DEBUG] R2 upload successful!`);
+              console.log(
+                `    ✅ [R2 DEBUG] R2 response:`,
+                JSON.stringify(r2Response, null, 2),
+              );
+              imageUrl = r2Response.url;
+            } catch (uploadError: any) {
+              console.error(`    ❌ [R2 DEBUG] Upload failed for chunk ${index + 1}:`, uploadError.message);
+              throw uploadError; // Re-throw to see the detailed error
+            }
 
-            imageUrl = blob.url;
-            console.log(`    🖼️  [BLOB DEBUG] Final image URL: ${imageUrl}`);
+            console.log(`    🖼️  [R2 DEBUG] Final image URL: ${imageUrl}`);
 
             // Test if the URL is accessible
             try {
               const testResponse = await fetch(imageUrl, { method: 'HEAD' });
               console.log(
-                `    🌐 [BLOB DEBUG] URL accessibility test: ${testResponse.status} ${testResponse.statusText}`,
+                `    🌐 [R2 DEBUG] URL accessibility test: ${testResponse.status} ${testResponse.statusText}`,
               );
             } catch (testError) {
               console.warn(
-                `    ⚠️  [BLOB DEBUG] URL accessibility test failed:`,
+                `    ⚠️  [R2 DEBUG] URL accessibility test failed:`,
                 testError,
               );
             }
           } catch (error: any) {
             console.error(
-              `    ❌ [BLOB DEBUG] Failed to save image to Vercel Blob:`,
+              `    ❌ [R2 DEBUG] Failed to save image to Cloudflare R2:`,
               error,
             );
-            console.error(`    ❌ [BLOB DEBUG] Error details:`, error.message);
+            console.error(`    ❌ [R2 DEBUG] Error details:`, error.message);
             if (error.stack) {
-              console.error(`    ❌ [BLOB DEBUG] Stack trace:`, error.stack);
+              console.error(`    ❌ [R2 DEBUG] Stack trace:`, error.stack);
             }
 
             // Fallback: store as data URL for immediate use
             imageUrl = `data:image/png;base64,${chunk.image_data}`;
             console.log(
-              `    🔄 [BLOB DEBUG] Using fallback data URL (length: ${imageUrl.length})`,
+              `    🔄 [R2 DEBUG] Using fallback data URL (length: ${imageUrl.length})`,
             );
           }
 
           console.log(
-            `    ✅ [BLOB DEBUG] Final imageUrl for chunk ${index + 1}: ${imageUrl ? `${imageUrl.substring(0, 100)}...` : 'undefined'}`,
+            `    ✅ [R2 DEBUG] Final imageUrl for chunk ${index + 1}: ${imageUrl ? `${imageUrl.substring(0, 100)}...` : 'undefined'}`,
           );
         }
 
@@ -461,34 +466,34 @@ export const DocumentProcessor = {
       const imageBuffer = await readFile(filePath);
       const imageBase64 = imageBuffer.toString('base64');
 
-      // Store image in Vercel Blob (for serverless environments)
-      console.log(`    🖼️  [BLOB DEBUG] Processing uploaded image file`);
+      // Store image in Cloudflare R2 (for serverless environments)
+      console.log(`    🖼️  [R2 DEBUG] Processing uploaded image file`);
       console.log(
-        `    🖼️  [BLOB DEBUG] Image base64 length: ${imageBase64.length} chars`,
+        `    🖼️  [R2 DEBUG] Image base64 length: ${imageBase64.length} chars`,
       );
       console.log(
-        `    🖼️  [BLOB DEBUG] Image buffer size: ${imageBuffer.length} bytes`,
+        `    🖼️  [R2 DEBUG] Image buffer size: ${imageBuffer.length} bytes`,
       );
       console.log(
-        `    🖼️  [BLOB DEBUG] BLOB_READ_WRITE_TOKEN present: ${!!process.env.BLOB_READ_WRITE_TOKEN}`,
+        `    🖼️  [R2 DEBUG] R2 config present: ${!!process.env.R2_ACCOUNT_ID}`,
       );
 
       let imageUrl: string;
       try {
         console.log(
-          `    🔧 [BLOB DEBUG] Attempting to import @vercel/blob for uploaded image...`,
+          `    🔧 [R2 DEBUG] Attempting to import R2 utility for uploaded image...`,
         );
-        const { put } = await import('@vercel/blob');
+        const { put } = await import('@/lib/r2');
         console.log(
-          `    ✅ [BLOB DEBUG] Successfully imported @vercel/blob for uploaded image`,
+          `    ✅ [R2 DEBUG] Successfully imported R2 utility for uploaded image`,
         );
 
-        // Check if BLOB_READ_WRITE_TOKEN is available
-        if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        // Check if R2 config is available
+        if (!process.env.R2_ACCOUNT_ID || !process.env.R2_ACCESS_KEY_ID) {
           console.warn(
-            `    ⚠️  [BLOB DEBUG] BLOB_READ_WRITE_TOKEN not available for uploaded image - using fallback`,
+            `    ⚠️  [R2 DEBUG] R2 configuration not available for uploaded image - using fallback`,
           );
-          throw new Error('BLOB_READ_WRITE_TOKEN not available');
+          throw new Error('R2 configuration not available');
         }
 
         const imageHash = crypto
@@ -499,15 +504,15 @@ export const DocumentProcessor = {
         const imageFileName = `doc-images/${imageHash}.png`;
 
         console.log(
-          `    🔧 [BLOB DEBUG] Generated filename for uploaded image: ${imageFileName}`,
+          `    🔧 [R2 DEBUG] Generated filename for uploaded image: ${imageFileName}`,
         );
         console.log(
-          `    🔧 [BLOB DEBUG] Image hash for uploaded image: ${imageHash}`,
+          `    🔧 [R2 DEBUG] Image hash for uploaded image: ${imageHash}`,
         );
 
-        // Upload to Vercel Blob
+        // Upload to Cloudflare R2
         console.log(
-          `    🚀 [BLOB DEBUG] Starting blob upload for uploaded image...`,
+          `    🚀 [R2 DEBUG] Starting R2 upload for uploaded image...`,
         );
         // Determine content type based on file extension
         const contentType =
@@ -516,47 +521,47 @@ export const DocumentProcessor = {
             ? 'image/jpeg'
             : 'image/png';
 
-        const blob = await put(imageFileName, imageBuffer, {
+        const r2Response = await put(imageFileName, imageBuffer, {
           access: 'public',
           contentType,
         });
         console.log(
-          `    ✅ [BLOB DEBUG] Blob upload successful for uploaded image!`,
+          `    ✅ [R2 DEBUG] R2 upload successful for uploaded image!`,
         );
         console.log(
-          `    ✅ [BLOB DEBUG] Blob response for uploaded image:`,
-          JSON.stringify(blob, null, 2),
+          `    ✅ [R2 DEBUG] R2 response for uploaded image:`,
+          JSON.stringify(r2Response, null, 2),
         );
 
-        imageUrl = blob.url;
+        imageUrl = r2Response.url;
         console.log(
-          `    🖼️  [BLOB DEBUG] Final image URL for uploaded image: ${imageUrl}`,
+          `    🖼️  [R2 DEBUG] Final image URL for uploaded image: ${imageUrl}`,
         );
 
         // Test if the URL is accessible
         try {
           const testResponse = await fetch(imageUrl, { method: 'HEAD' });
           console.log(
-            `    🌐 [BLOB DEBUG] URL accessibility test for uploaded image: ${testResponse.status} ${testResponse.statusText}`,
+            `    🌐 [R2 DEBUG] URL accessibility test for uploaded image: ${testResponse.status} ${testResponse.statusText}`,
           );
         } catch (testError) {
           console.warn(
-            `    ⚠️  [BLOB DEBUG] URL accessibility test failed for uploaded image:`,
+            `    ⚠️  [R2 DEBUG] URL accessibility test failed for uploaded image:`,
             testError,
           );
         }
       } catch (error: any) {
         console.error(
-          `    ❌ [BLOB DEBUG] Failed to save uploaded image to Vercel Blob:`,
+          `    ❌ [R2 DEBUG] Failed to save uploaded image to Cloudflare R2:`,
           error,
         );
         console.error(
-          `    ❌ [BLOB DEBUG] Error details for uploaded image:`,
+          `    ❌ [R2 DEBUG] Error details for uploaded image:`,
           error.message,
         );
         if (error.stack) {
           console.error(
-            `    ❌ [BLOB DEBUG] Stack trace for uploaded image:`,
+            `    ❌ [R2 DEBUG] Stack trace for uploaded image:`,
             error.stack,
           );
         }
@@ -564,7 +569,7 @@ export const DocumentProcessor = {
         // Fallback: use data URL
         imageUrl = `data:image/png;base64,${imageBase64}`;
         console.log(
-          `    🔄 [BLOB DEBUG] Using fallback data URL for uploaded image (length: ${imageUrl.length})`,
+          `    🔄 [R2 DEBUG] Using fallback data URL for uploaded image (length: ${imageUrl.length})`,
         );
       }
 

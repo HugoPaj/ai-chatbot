@@ -288,7 +288,7 @@ export function DocumentUploadPopup() {
           className="h-8 px-2"
           title="Upload Documents"
         >
-          <FileText className="h-4 w-4" />
+          <FileText className="size-4" />
           <span className="sr-only">Upload Documents</span>
         </Button>
       </SheetTrigger>
@@ -305,7 +305,7 @@ export function DocumentUploadPopup() {
         <div className="space-y-4">
           <div className="text-xs text-muted-foreground p-3 bg-muted rounded-md">
             <div className="flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <AlertCircle className="size-4 mt-0.5 shrink-0" />
               <div>
                 <p>You can select multiple files at once for batch upload.</p>
                 <p className="mt-1">Maximum file size: 10MB per file</p>
@@ -317,7 +317,7 @@ export function DocumentUploadPopup() {
             <input
               type="file"
               id="rag-document-upload-popup"
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              className="absolute inset-0 size-full opacity-0 cursor-pointer"
               onChange={handleUpload}
               accept=".pdf,.jpg,.jpeg,.png"
               disabled={isUploading}
@@ -330,12 +330,12 @@ export function DocumentUploadPopup() {
             >
               {isUploading ? (
                 <>
-                  <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  <div className="size-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
                   Uploading...
                 </>
               ) : (
                 <>
-                  <Upload className="h-4 w-4 mr-2" />
+                  <Upload className="size-4 mr-2" />
                   Upload Documents
                 </>
               )}
@@ -346,7 +346,7 @@ export function DocumentUploadPopup() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Database className="h-4 w-4" />
+                <Database className="size-4" />
                 <span className="text-sm font-medium">Stored Documents</span>
                 {storedFiles.length > 0 && (
                   <span className="text-xs text-muted-foreground">
@@ -362,7 +362,7 @@ export function DocumentUploadPopup() {
                 className="h-7 px-2"
               >
                 <RefreshCw
-                  className={`h-3 w-3 ${isLoadingFiles ? 'animate-spin' : ''}`}
+                  className={`size-3 ${isLoadingFiles ? 'animate-spin' : ''}`}
                 />
                 <span className="sr-only">Refresh</span>
               </Button>
@@ -370,7 +370,7 @@ export function DocumentUploadPopup() {
 
             {isLoadingFiles ? (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
-                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                <RefreshCw className="size-4 animate-spin mr-2" />
                 Loading stored files...
               </div>
             ) : storedFiles.length === 0 ? (
@@ -385,7 +385,7 @@ export function DocumentUploadPopup() {
                     className="flex items-center justify-between p-3 border-b last:border-b-0 hover:bg-muted/50 transition-colors"
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <FileText className="size-4 text-muted-foreground shrink-0" />
                       <span className="text-sm truncate" title={file.filename}>
                         {file.filename}
                       </span>
@@ -395,13 +395,13 @@ export function DocumentUploadPopup() {
                       size="sm"
                       onClick={() => confirmDelete(file.filename)}
                       disabled={file.isDeleting || isUploading}
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                      className="size-7 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
                       title={`Delete ${file.filename}`}
                     >
                       {file.isDeleting ? (
-                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        <RefreshCw className="size-3 animate-spin" />
                       ) : (
-                        <Trash2 className="h-3 w-3" />
+                        <Trash2 className="size-3" />
                       )}
                     </Button>
                   </div>
@@ -424,18 +424,18 @@ export function DocumentUploadPopup() {
                     key={`${status.file.name}-${status.file.size}-${status.file.lastModified}`}
                     className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg"
                   >
-                    <div className="flex-shrink-0 mt-0.5">
+                    <div className="shrink-0 mt-0.5">
                       {status.status === 'pending' && (
-                        <div className="h-4 w-4 rounded-full bg-gray-300" />
+                        <div className="size-4 rounded-full bg-gray-300" />
                       )}
                       {status.status === 'uploading' && (
-                        <div className="h-4 w-4 rounded-full bg-blue-500 animate-pulse" />
+                        <div className="size-4 rounded-full bg-blue-500 animate-pulse" />
                       )}
                       {status.status === 'success' && (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        <CheckCircle className="size-4 text-green-500" />
                       )}
                       {status.status === 'error' && (
-                        <XCircle className="h-4 w-4 text-red-500" />
+                        <XCircle className="size-4 text-red-500" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0 space-y-1">

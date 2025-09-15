@@ -32,17 +32,17 @@ export class CohereEmbeddingService {
   private static cohere: CohereClient;
 
   private static initializeClient(): CohereClient {
-    if (!this.cohere) {
+    if (!CohereEmbeddingService.cohere) {
       // Check for both possible environment variable names
       const apiKey = process.env.COHERE_API_KEY || process.env.CO_API_KEY;
       if (!apiKey) {
         throw new Error('COHERE_API_KEY or CO_API_KEY is not configured');
       }
-      this.cohere = new CohereClient({
+      CohereEmbeddingService.cohere = new CohereClient({
         token: apiKey,
       });
     }
-    return this.cohere;
+    return CohereEmbeddingService.cohere;
   }
 
   static async generateMultimodalEmbeddings(
@@ -50,7 +50,7 @@ export class CohereEmbeddingService {
     inputType: 'search_document' | 'search_query' = 'search_document',
     retryCount = 0,
   ): Promise<number[][]> {
-    const client = this.initializeClient();
+    const client = CohereEmbeddingService.initializeClient();
     const maxRetries = 3;
     const baseDelay = 100; // 0.1 seconds
 
@@ -169,7 +169,7 @@ export class CohereEmbeddingService {
         const delay = baseDelay * Math.pow(2, retryCount); // Exponential backoff
         console.log(`  Rate limited. Retrying in ${delay / 1000} seconds...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
-        return this.generateMultimodalEmbeddings(
+        return CohereEmbeddingService.generateMultimodalEmbeddings(
           content,
           inputType,
           retryCount + 1,
@@ -184,7 +184,7 @@ export class CohereEmbeddingService {
         const delay = baseDelay * Math.pow(2, retryCount); // Exponential backoff
         console.log(`  Network error. Retrying in ${delay / 1000} seconds...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
-        return this.generateMultimodalEmbeddings(
+        return CohereEmbeddingService.generateMultimodalEmbeddings(
           content,
           inputType,
           retryCount + 1,
@@ -200,7 +200,7 @@ export class CohereEmbeddingService {
     content: MultimodalInput,
     inputType: 'search_document' | 'search_query' = 'search_document',
   ): Promise<number[]> {
-    const embeddings = await this.generateMultimodalEmbeddings(
+    const embeddings = await CohereEmbeddingService.generateMultimodalEmbeddings(
       content,
       inputType,
     );
@@ -214,7 +214,7 @@ export class CohereEmbeddingService {
     }
 
     // Remove control characters and problematic Unicode
-    let cleaned = text
+    const cleaned = text
       // Remove null bytes and control characters (except tabs and newlines)
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
       // Normalize whitespace
@@ -237,7 +237,7 @@ export class CohereEmbeddingService {
     }
 
     // Clean the text to ensure API compatibility
-    const cleanedText = this.cleanTextForAPI(text);
+    const cleanedText = CohereEmbeddingService.cleanTextForAPI(text);
 
     if (!cleanedText || cleanedText.length < 10) {
       throw new Error(
@@ -256,7 +256,7 @@ export class CohereEmbeddingService {
     const maxLength = 100000; // Conservative limit
     const finalText =
       cleanedText.length > maxLength
-        ? cleanedText.substring(0, maxLength) + '...'
+        ? `${cleanedText.substring(0, maxLength)}...`
         : cleanedText;
 
     if (cleanedText.length > maxLength) {
@@ -265,7 +265,7 @@ export class CohereEmbeddingService {
       );
     }
 
-    return this.generateSingleEmbedding(
+    return CohereEmbeddingService.generateSingleEmbedding(
       { type: 'text', text: finalText },
       inputType,
     );
@@ -277,9 +277,9 @@ export class CohereEmbeddingService {
     inputType: 'search_document' | 'search_query' = 'search_document',
   ): Promise<number[]> {
     // Validate and clean base64 image data
-    const cleanImageData = this.validateAndCleanBase64Image(imageBase64);
+    const cleanImageData = CohereEmbeddingService.validateAndCleanBase64Image(imageBase64);
 
-    return this.generateSingleEmbedding(
+    return CohereEmbeddingService.generateSingleEmbedding(
       { type: 'image', image: cleanImageData },
       inputType,
     );

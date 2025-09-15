@@ -25,16 +25,16 @@ export async function DELETE(request: Request) {
 
     console.log(`[DELETE API] Deleting documents by filename: ${filename}`);
 
-    // Get blob URLs before deleting the vectors
-    let blobUrls: string[] = [];
+    // Get R2 URLs before deleting the vectors
+    let r2Urls: string[] = [];
     try {
-      blobUrls = await vectorStore.getBlobUrlsForFile(filename);
+      r2Urls = await vectorStore.getBlobUrlsForFile(filename);
       console.log(
-        `[DELETE API] Found ${blobUrls.length} blob URLs to delete for ${filename}`,
+        `[DELETE API] Found ${r2Urls.length} R2 URLs to delete for ${filename}`,
       );
     } catch (error) {
       console.warn(
-        `[DELETE API] Could not retrieve blob URLs for ${filename}:`,
+        `[DELETE API] Could not retrieve R2 URLs for ${filename}:`,
         error,
       );
     }
@@ -42,29 +42,35 @@ export async function DELETE(request: Request) {
     // Delete vectors from Pinecone
     const success = await vectorStore.deleteDocumentsByFilename(filename);
 
-    // Delete associated blobs from Vercel if vector deletion was successful
-    if (success && blobUrls.length > 0) {
+    // Delete associated files from R2 if vector deletion was successful
+    if (success && r2Urls.length > 0) {
       try {
-        const { del } = await import('@vercel/blob');
-        console.log(`[DELETE API] Deleting ${blobUrls.length} blob(s)...`);
+        const { del } = await import('@/lib/r2');
+        console.log(`[DELETE API] Deleting ${r2Urls.length} file(s) from R2...`);
 
-        const deletePromises = blobUrls.map(async (url) => {
+        const deletePromises = r2Urls.map(async (url) => {
           try {
-            await del(url);
-            console.log(`[DELETE API] Successfully deleted blob: ${url}`);
+            // Extract pathname from URL for R2 deletion
+            const urlObj = new URL(url);
+            const pathname = urlObj.pathname.startsWith('/')
+              ? urlObj.pathname.slice(1)
+              : urlObj.pathname;
+
+            await del(pathname);
+            console.log(`[DELETE API] Successfully deleted R2 file: ${pathname}`);
           } catch (error) {
-            console.error(`[DELETE API] Failed to delete blob ${url}:`, error);
-            // Don't fail the entire operation if one blob deletion fails
+            console.error(`[DELETE API] Failed to delete R2 file ${url}:`, error);
+            // Don't fail the entire operation if one file deletion fails
           }
         });
 
         await Promise.allSettled(deletePromises);
         console.log(
-          `[DELETE API] Completed blob deletion process for ${filename}`,
+          `[DELETE API] Completed R2 deletion process for ${filename}`,
         );
       } catch (error) {
-        console.error(`[DELETE API] Error during blob deletion:`, error);
-        // Don't fail the operation if blob deletion fails
+        console.error(`[DELETE API] Error during R2 deletion:`, error);
+        // Don't fail the operation if R2 deletion fails
       }
     }
 

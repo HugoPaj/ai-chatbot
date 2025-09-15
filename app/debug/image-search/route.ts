@@ -1,10 +1,10 @@
 import { VectorStore } from '@/lib/ai/vectorStore';
-import { NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q') || 'thermodynamics diagram';
-  const limit = parseInt(searchParams.get('limit') || '50');
+  const limit = Number.parseInt(searchParams.get('limit') || '50');
 
   try {
     const vectorStore = new VectorStore();
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       filename: doc.metadata.filename,
       page: doc.metadata.page,
       imageUrl: doc.metadata.imageUrl,
-      content: doc.metadata.content?.substring(0, 100) + '...',
+      content: `${doc.metadata.content?.substring(0, 100)}...`,
       hasImageData: !!doc.metadata.imageData,
       imageDataLength: doc.metadata.imageData?.length || 0,
     }));

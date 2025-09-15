@@ -78,7 +78,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                   className="cursor-pointer"
                   onSelect={() => router.push('/dashboard')}
                 >
-                  <Settings className="h-4 w-4" />
+                  <Settings className="size-4" />
                   Dashboard
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
