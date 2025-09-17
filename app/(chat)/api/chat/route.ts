@@ -41,7 +41,7 @@ import {
 import { after } from 'next/server';
 import { ChatSDKError } from '@/lib/errors';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 import redis from '@/lib/redis';
 
