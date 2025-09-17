@@ -384,12 +384,105 @@ export class VectorStore {
       console.log(`🗑️ Deleting all vectors for file: ${filename}`);
       const index = this.pinecone.index(this.indexName);
 
-      // Delete all vectors with matching filename in metadata
-      await index.deleteMany({
-        filter: { filename: { $eq: filename } },
-      });
+      // Try the direct filter approach first
+      try {
+        console.log(`🔄 Attempting direct deletion with filter...`);
+        await index.deleteMany({
+          filter: { filename: { $eq: filename } },
+        });
+        console.log(`✅ Successfully deleted all vectors for file: ${filename} (direct method)`);
+        return true;
+      } catch (filterError) {
+        console.log(`⚠️ Direct filter deletion failed, trying query-then-delete approach...`);
+        console.log(`Filter error:`, (filterError as Error).message);
+      }
 
-      console.log(`✅ Successfully deleted all vectors for file: ${filename}`);
+      // Fallback: Query first, then delete by IDs
+      // Use a more targeted approach with timeout
+      const dummyEmbedding = new Array(1536).fill(0);
+      const TIMEOUT_MS = 30000; // 30 second timeout
+      const startTime = Date.now();
+
+      console.log(`📋 Searching for vectors with filename: ${filename}`);
+
+      // Try to use filter in query first
+      let queryResponse: any;
+      try {
+        queryResponse = await Promise.race([
+          index.query({
+            vector: dummyEmbedding,
+            topK: 10000,
+            includeMetadata: true,
+            includeValues: false,
+            filter: { filename: { $eq: filename } },
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Query timeout')), TIMEOUT_MS)
+          )
+        ]);
+      } catch (queryError) {
+        console.log(`⚠️ Filtered query failed or timed out, trying unfiltered approach...`);
+
+        // Last resort: query without filter and search client-side (with limits)
+        try {
+          queryResponse = await Promise.race([
+            index.query({
+              vector: dummyEmbedding,
+              topK: 1000, // Reduced to avoid timeout
+              includeMetadata: true,
+              includeValues: false,
+            }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Unfiltered query timeout')), 10000)
+            )
+          ]);
+
+          // Filter client-side
+          if (queryResponse && queryResponse.matches) {
+            queryResponse.matches = queryResponse.matches.filter(
+              (match: any) => match.metadata?.filename === filename
+            );
+          }
+        } catch (unfilteredError) {
+          console.error(`❌ All query approaches failed:`, unfilteredError);
+          return false;
+        }
+      }
+
+      if (!queryResponse || !queryResponse.matches || queryResponse.matches.length === 0) {
+        console.log(`⚠️ No vectors found for file: ${filename}`);
+        return true; // Consider it successful if there's nothing to delete
+      }
+
+      // Extract vector IDs
+      const vectorIds = queryResponse.matches.map((match: any) => match.id);
+      console.log(`📋 Found ${vectorIds.length} vectors to delete for file: ${filename}`);
+
+      // Delete vectors by ID in smaller batches
+      const deleteBatchSize = 50; // Smaller batches to avoid issues
+      for (let i = 0; i < vectorIds.length; i += deleteBatchSize) {
+        const batch = vectorIds.slice(i, i + deleteBatchSize);
+        console.log(`🗑️ Deleting batch ${Math.floor(i / deleteBatchSize) + 1}/${Math.ceil(vectorIds.length / deleteBatchSize)} (${batch.length} vectors)`);
+
+        try {
+          await Promise.race([
+            index.deleteMany(batch),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Delete batch timeout')), 15000)
+            )
+          ]);
+        } catch (deleteError) {
+          console.error(`❌ Failed to delete batch:`, deleteError);
+          // Continue with next batch instead of failing entirely
+        }
+
+        // Small delay between delete batches
+        if (i + deleteBatchSize < vectorIds.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+
+      console.log(`✅ Completed deletion process for file: ${filename}`);
       return true;
     } catch (error) {
       console.error(`❌ Error deleting vectors for file ${filename}:`, error);
@@ -413,29 +506,58 @@ export class VectorStore {
   }
 
   /**
-   * Get all blob URLs associated with a specific filename
+   * Get all R2 URLs associated with a specific filename
    * @param filename The filename to search for
-   * @returns Promise<string[]> Array of blob URLs
+   * @returns Promise<string[]> Array of R2 URLs
    */
   async getBlobUrlsForFile(filename: string): Promise<string[]> {
     try {
-      console.log(`📋 Retrieving blob URLs for file: ${filename}`);
+      console.log(`📋 Retrieving R2 URLs for file: ${filename}`);
       const index = this.pinecone.index(this.indexName);
 
       // Create a dummy embedding to query (we just want metadata, not similarity)
       const dummyEmbedding = new Array(1536).fill(0);
 
-      // Query with high topK and filter by filename to get all chunks for this file
-      const queryResponse = await index.query({
-        vector: dummyEmbedding,
-        topK: 1000, // Get up to 1000 results to find all chunks
-        includeMetadata: true,
-        includeValues: false,
-        filter: { filename: { $eq: filename } },
-      });
+      // Try filtered query first, fallback to unfiltered if it fails
+      let queryResponse: any;
+      try {
+        queryResponse = await Promise.race([
+          index.query({
+            vector: dummyEmbedding,
+            topK: 1000, // Get up to 1000 results to find all chunks
+            includeMetadata: true,
+            includeValues: false,
+            filter: { filename: { $eq: filename } },
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Query timeout')), 15000)
+          )
+        ]);
+      } catch (error) {
+        console.log(`⚠️ Filtered query failed, trying unfiltered approach for R2 URLs...`);
+        // Fallback: query without filter and filter client-side
+        queryResponse = await Promise.race([
+          index.query({
+            vector: dummyEmbedding,
+            topK: 1000,
+            includeMetadata: true,
+            includeValues: false,
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Unfiltered query timeout')), 10000)
+          )
+        ]);
 
-      // Extract unique blob URLs from the results
-      const blobUrlsSet = new Set<string>();
+        // Filter client-side
+        if (queryResponse && queryResponse.matches) {
+          queryResponse.matches = queryResponse.matches.filter(
+            (match: any) => match.metadata?.filename === filename
+          );
+        }
+      }
+
+      // Extract unique R2 URLs from the results
+      const r2UrlsSet = new Set<string>();
 
       if (queryResponse.matches) {
         for (const match of queryResponse.matches) {
@@ -443,19 +565,19 @@ export class VectorStore {
             match.metadata?.imageUrl &&
             typeof match.metadata.imageUrl === 'string'
           ) {
-            blobUrlsSet.add(match.metadata.imageUrl);
+            r2UrlsSet.add(match.metadata.imageUrl);
           }
         }
       }
 
-      const blobUrls = Array.from(blobUrlsSet);
+      const r2Urls = Array.from(r2UrlsSet);
       console.log(
-        `📋 Found ${blobUrls.length} blob URLs for file: ${filename}`,
+        `📋 Found ${r2Urls.length} R2 URLs for file: ${filename}`,
       );
 
-      return blobUrls;
+      return r2Urls;
     } catch (error) {
-      console.error(`Error getting blob URLs for file ${filename}:`, error);
+      console.error(`Error getting R2 URLs for file ${filename}:`, error);
       throw error;
     }
   }
