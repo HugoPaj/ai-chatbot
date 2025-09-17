@@ -18,7 +18,8 @@ export type DataStreamDelta = {
     | 'clear'
     | 'finish'
     | 'kind'
-    | 'sources';
+    | 'sources'
+    | 'context';
   content: string | Suggestion;
 };
 

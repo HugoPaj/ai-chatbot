@@ -119,7 +119,11 @@ export async function POST(request: Request) {
       return error.toResponse();
     }
 
-    const chat = await getChatById({ id });
+    // Run database operations in parallel for better performance
+    const [chat, previousMessages] = await Promise.all([
+      getChatById({ id }),
+      getMessagesByChatId({ id })
+    ]);
 
     if (!chat) {
       const title = await generateTitleFromUserMessage({
@@ -138,8 +142,6 @@ export async function POST(request: Request) {
       }
     }
 
-    const previousMessages = await getMessagesByChatId({ id });
-
     const messages = appendClientMessage({
       // @ts-expect-error: todo add type conversion from DBMessage[] to UIMessage[]
       messages: previousMessages,
@@ -155,45 +157,43 @@ export async function POST(request: Request) {
       country,
     };
 
-    await saveMessages({
-      messages: [
-        {
-          chatId: id,
-          id: message.id,
-          role: 'user',
-          parts: message.parts,
-          attachments: message.experimental_attachments ?? [],
-          createdAt: new Date(),
-        },
-      ],
-    });
-
-    // Increment daily usage count
-    await incrementDailyUsage({
-      userId: session.user.id,
-      date: today,
-    });
-
+    // Run user message saving and stream setup in parallel
     const streamId = generateUUID();
-    await createStreamId({ streamId, chatId: id });
+    await Promise.all([
+      saveMessages({
+        messages: [
+          {
+            chatId: id,
+            id: message.id,
+            role: 'user',
+            parts: message.parts,
+            attachments: message.experimental_attachments ?? [],
+            createdAt: new Date(),
+          },
+        ],
+      }),
+      incrementDailyUsage({
+        userId: session.user.id,
+        date: today,
+      }),
+      createStreamId({ streamId, chatId: id })
+    ]);
 
     const stream = createDataStream({
       execute: async (dataStream) => {
-        // Initialize the vector store for document search
-        const vectorStore = new VectorStore();
-
-        // Ensure the Pinecone index exists and is correctly configured before searching
-        // This is fast when the index already exists but guarantees that searchSimilar()
-        // will not fail due to a missing index on fresh deployments.
-        await vectorStore.initialize();
-
-        // Search for relevant documents based on the user's message
-        const userMessageText =
-          message.parts.find((part) => part.type === 'text')?.text || '';
+        // Start streaming immediately while preparing context in background
         let documentContext = '';
         let documentSources: string[] = [];
 
+        // Extract user message text for async processing
+        const userMessageText =
+          message.parts.find((part) => part.type === 'text')?.text || '';
+
+        // Get document context before starting stream for better results
         try {
+          const vectorStore = new VectorStore();
+          await vectorStore.initialize();
+
           console.log(
             '[VectorStore] Searching for documents similar to user query…',
           );
@@ -356,9 +356,10 @@ export async function POST(request: Request) {
                   .map((doc) => doc.metadata.filename),
               ),
             );
-          } else {
-            console.log('[VectorStore] No relevant documents found for query.');
-          }
+            } else {
+              console.log('[VectorStore] No relevant documents found for query.');
+            }
+
         } catch (error) {
           console.error('Error retrieving similar documents:', error);
           // Continue without document context if there's an error
@@ -388,7 +389,10 @@ export async function POST(request: Request) {
                   'updateDocument',
                   'requestSuggestions',
                 ],
-          experimental_transform: smoothStream({ chunking: 'word' }),
+          experimental_transform: smoothStream({
+            chunking: 'word',
+            delayInMs: 5 // Smooth streaming at 200 chars/second
+          }),
           experimental_generateMessageId: generateUUID,
           tools: {
             getWeather,
@@ -400,39 +404,54 @@ export async function POST(request: Request) {
             }),
           },
           onFinish: async ({ response }) => {
+            // Save assistant response asynchronously without blocking
             if (session.user?.id) {
-              try {
-                const assistantId = getTrailingMessageId({
-                  messages: response.messages.filter(
-                    (message) => message.role === 'assistant',
-                  ),
-                });
+              setImmediate(async () => {
+                try {
+                  const assistantId = getTrailingMessageId({
+                    messages: response.messages.filter(
+                      (message) => message.role === 'assistant',
+                    ),
+                  });
 
-                if (!assistantId) {
-                  throw new Error('No assistant message found!');
+                  if (!assistantId) {
+                    throw new Error('No assistant message found!');
+                  }
+
+                  const [, assistantMessage] = appendResponseMessages({
+                    messages: [message],
+                    responseMessages: response.messages,
+                  });
+
+                  await saveMessages({
+                    messages: [
+                      {
+                        id: assistantId,
+                        chatId: id,
+                        role: assistantMessage.role,
+                        parts: assistantMessage.parts,
+                        attachments:
+                          assistantMessage.experimental_attachments ?? [],
+                        createdAt: new Date(),
+                      },
+                    ],
+                  });
+                } catch (_) {
+                  console.error('Failed to save chat');
                 }
+              });
+            }
 
-                const [, assistantMessage] = appendResponseMessages({
-                  messages: [message],
-                  responseMessages: response.messages,
-                });
-
-                await saveMessages({
-                  messages: [
-                    {
-                      id: assistantId,
-                      chatId: id,
-                      role: assistantMessage.role,
-                      parts: assistantMessage.parts,
-                      attachments:
-                        assistantMessage.experimental_attachments ?? [],
-                      createdAt: new Date(),
-                    },
-                  ],
-                });
-              } catch (_) {
-                console.error('Failed to save chat');
-              }
+            // Send sources data if available
+            console.log(`[DEBUG] Document sources count: ${documentSources.length}`, documentSources);
+            if (documentSources.length > 0) {
+              console.log('[DEBUG] Sending sources data:', documentSources);
+              dataStream.writeData({
+                type: 'sources',
+                content: JSON.stringify(documentSources),
+              });
+            } else {
+              console.log('[DEBUG] No document sources to send');
             }
           },
           experimental_telemetry: {
@@ -446,14 +465,6 @@ export async function POST(request: Request) {
         result.mergeIntoDataStream(dataStream, {
           sendReasoning: true,
         });
-
-        // Send sources data after the response is complete
-        if (documentSources.length > 0) {
-          dataStream.writeData({
-            type: 'sources',
-            content: JSON.stringify(documentSources),
-          });
-        }
       },
       onError: () => {
         return 'Oops, an error occurred!';

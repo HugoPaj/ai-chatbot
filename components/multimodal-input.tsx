@@ -27,6 +27,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import type { VisibilityType } from './visibility-selector';
+import { usePerformanceMonitor } from '@/lib/performance-monitor';
 
 function PureMultimodalInput({
   chatId,
@@ -108,9 +109,13 @@ function PureMultimodalInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
+  const { startRequest } = usePerformanceMonitor();
 
   const submitForm = useCallback(() => {
     window.history.replaceState({}, '', `/chat/${chatId}`);
+
+    // Start performance monitoring
+    startRequest(chatId);
 
     handleSubmit(undefined, {
       experimental_attachments: attachments,
@@ -130,6 +135,7 @@ function PureMultimodalInput({
     setLocalStorageInput,
     width,
     chatId,
+    startRequest,
   ]);
 
   const uploadFile = async (file: File) => {
@@ -137,10 +143,17 @@ function PureMultimodalInput({
     formData.append('file', file);
 
     try {
+      // Use a more aggressive timeout for faster failure detection
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
       const response = await fetch('/api/files/upload', {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const data = await response.json();
@@ -155,7 +168,11 @@ function PureMultimodalInput({
       const { error } = await response.json();
       toast.error(error);
     } catch (error) {
-      toast.error('Failed to upload file, please try again!');
+      if (error instanceof Error && error.name === 'AbortError') {
+        toast.error('Upload timeout - please try again with a smaller file');
+      } else {
+        toast.error('Failed to upload file, please try again!');
+      }
     }
   };
 

@@ -24,7 +24,9 @@ export async function fetchWithErrorHandlers(
   init?: RequestInit,
 ) {
   try {
-    const response = await fetch(input, init);
+    // Use optimized fetch with retry for better performance
+    const { fetchWithRetry } = await import('./optimized-fetch');
+    const response = await fetchWithRetry(input.toString(), init);
 
     if (!response.ok) {
       const { code, cause } = await response.json();

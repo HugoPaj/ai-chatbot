@@ -1,5 +1,4 @@
 import { signIn, auth } from '@/app/(auth)/auth';
-import { isDevelopmentEnvironment } from '@/lib/constants';
 import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {

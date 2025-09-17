@@ -20,6 +20,7 @@ import { useSearchParams } from 'next/navigation';
 import { useChatVisibility } from '@/hooks/use-chat-visibility';
 import { useAutoResume } from '@/hooks/use-auto-resume';
 import { ChatSDKError } from '@/lib/errors';
+import { usePerformanceMonitor } from '@/lib/performance-monitor';
 
 export function Chat({
   id,
@@ -45,6 +46,8 @@ export function Chat({
     initialVisibilityType,
   });
 
+  const { startRequest, recordFirstToken, recordStreamComplete, logMetrics } = usePerformanceMonitor();
+
   const {
     messages,
     setMessages,
@@ -60,7 +63,7 @@ export function Chat({
   } = useChat({
     id,
     initialMessages,
-    experimental_throttle: 100,
+    experimental_throttle: 16, // ~60fps for smoother streaming
     sendExtraMessageFields: true,
     generateId: generateUUID,
     fetch: fetchWithErrorHandlers,
@@ -71,7 +74,14 @@ export function Chat({
       selectedVisibilityType: visibilityType,
     }),
     onFinish: () => {
-      mutate(unstable_serialize(getChatHistoryPaginationKey));
+      // Record performance metrics
+      recordStreamComplete(id);
+      logMetrics(id);
+
+      // Use setTimeout to avoid blocking the UI update
+      setTimeout(() => {
+        mutate(unstable_serialize(getChatHistoryPaginationKey));
+      }, 0);
     },
     onError: (error) => {
       if (error instanceof ChatSDKError) {
