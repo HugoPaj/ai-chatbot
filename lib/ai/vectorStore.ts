@@ -393,7 +393,7 @@ export class VectorStore {
       return true;
     } catch (error) {
       console.error(`❌ Error deleting vectors for file ${filename}:`, error);
-      throw error;
+      return false;
     }
   }
 
