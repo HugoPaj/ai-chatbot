@@ -86,6 +86,9 @@ importers:
       '@vercel/postgres':
         specifier: ^0.10.0
         version: 0.10.0
+      '@vercel/speed-insights':
+        specifier: ^1.2.0
+        version: 1.2.0(next@15.3.0-canary.31(@opentelemetry/api@1.9.0)(@playwright/test@1.55.0)(react-dom@19.0.0-rc-45804af1-20241021(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021)
       ai:
         specifier: 4.3.13
         version: 4.3.13(react@19.0.0-rc-45804af1-20241021)(zod@3.25.76)
@@ -2694,6 +2697,29 @@ packages:
 
   '@vercel/ruby@2.2.0':
     resolution: {integrity: sha512-FJF9gKVNHAljGOgV6zS5ou2N7ZgjOqMMtcPA5lsJEUI5/AZzVDWCmtcowTP80wEtHuupkd7d7M399FA082kXYQ==}
+
+  '@vercel/speed-insights@1.2.0':
+    resolution: {integrity: sha512-y9GVzrUJ2xmgtQlzFP2KhVRoCglwfRQgjyfY607aU0hh0Un6d0OUyrJkjuAlsV18qR4zfoFPs/BiIj9YDS6Wzw==}
+    peerDependencies:
+      '@sveltejs/kit': ^1 || ^2
+      next: '>= 13'
+      react: ^18 || ^19 || ^19.0.0-rc
+      svelte: '>= 4'
+      vue: ^3
+      vue-router: ^4
+    peerDependenciesMeta:
+      '@sveltejs/kit':
+        optional: true
+      next:
+        optional: true
+      react:
+        optional: true
+      svelte:
+        optional: true
+      vue:
+        optional: true
+      vue-router:
+        optional: true
 
   '@vercel/static-build@2.7.10':
     resolution: {integrity: sha512-qH5WrNXDVMn6RtdzCzLK5Eqeq9ABkL+FsJTYyeS35Y4Sd9FYR6QsCSANm1Go0MMv3RLa5j1Jtje/9N7QaU4TKg==}
@@ -9174,6 +9200,11 @@ snapshots:
       - supports-color
 
   '@vercel/ruby@2.2.0': {}
+
+  '@vercel/speed-insights@1.2.0(next@15.3.0-canary.31(@opentelemetry/api@1.9.0)(@playwright/test@1.55.0)(react-dom@19.0.0-rc-45804af1-20241021(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021)':
+    optionalDependencies:
+      next: 15.3.0-canary.31(@opentelemetry/api@1.9.0)(@playwright/test@1.55.0)(react-dom@19.0.0-rc-45804af1-20241021(react@19.0.0-rc-45804af1-20241021))(react@19.0.0-rc-45804af1-20241021)
+      react: 19.0.0-rc-45804af1-20241021
 
   '@vercel/static-build@2.7.10':
     dependencies:

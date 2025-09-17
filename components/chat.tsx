@@ -93,6 +93,7 @@ export function Chat({
     },
   });
 
+
   const searchParams = useSearchParams();
   const query = searchParams.get('query');
 
