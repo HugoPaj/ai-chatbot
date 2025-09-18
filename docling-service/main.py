@@ -13,7 +13,7 @@ from typing import List, Dict, Any, Optional
 import logging
 import time
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
@@ -38,6 +38,27 @@ app = FastAPI(
     description="Advanced document processing with layout analysis, table extraction, and figure detection",
     version="1.0.0"
 )
+
+# Configure multipart upload limits to prevent memory issues
+# Max file size: 50MB (adjust based on your needs)
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_MULTIPART_SIZE = MAX_UPLOAD_SIZE
+
+@app.middleware("http")
+async def limit_upload_size(request: Request, call_next):
+    """Middleware to limit upload size and prevent memory exhaustion"""
+    if request.method == "POST" and "multipart/form-data" in request.headers.get("content-type", ""):
+        content_length = request.headers.get("content-length")
+        if content_length:
+            content_length = int(content_length)
+            if content_length > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum size allowed: {MAX_UPLOAD_SIZE // (1024*1024)}MB"
+                )
+    
+    response = await call_next(request)
+    return response
 
 # CORS middleware for Node.js integration
 # Get allowed origins from environment variable for production security
@@ -528,7 +549,7 @@ def extract_chunks_from_docling_doc(doc: DoclingDocument, filename: str = '', ma
     return chunks
 
 @app.post("/process-document", response_model=ProcessingResponse)
-async def process_document(file: UploadFile = File(...)):
+async def process_document(file: UploadFile = File(..., max_size=MAX_UPLOAD_SIZE)):
     """
     Process a document using Docling for advanced layout analysis
     Extracts text, images, and tables from PDF, DOCX, PPTX, and HTML files
@@ -589,8 +610,15 @@ async def process_document(file: UploadFile = File(...)):
             processing_time=processing_time
         )
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (like file size errors)
+        raise
     except Exception as e:
         logger.error(f"Error processing document {file.filename}: {e}")
+        # Log additional context for debugging
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error details: {str(e)}")
+        
         return ProcessingResponse(
             success=False,
             chunks=[],

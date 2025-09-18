@@ -8,6 +8,106 @@ import { CodeBlock } from './code-block';
 import Image from 'next/image';
 import 'katex/dist/katex.min.css';
 
+// Separate component for markdown images to properly use React hooks
+const MarkdownImage = ({ node, alt, src, ...props }: any) => {
+  // React hooks must be called before any early returns
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (!src) return null;
+
+  // Check if it's an R2 URL and handle it appropriately
+  const isR2Url =
+    src.includes('r2.cloudflarestorage.com') || src.includes('r2.dev');
+  const isDataUrl = src.startsWith('data:');
+
+  // Create a fallback image component for failed loads
+  const FallbackImage = ({
+    originalSrc,
+    altText,
+  }: { originalSrc: string; altText?: string }) => (
+    <span className="flex flex-col items-center justify-center p-8 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg">
+      <span className="text-gray-500 mb-2 block">
+        <svg
+          className="size-12"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+          />
+        </svg>
+      </span>
+      <span className="text-sm text-gray-600 text-center block">
+        Image temporarily unavailable
+      </span>
+      <span className="text-xs text-gray-400 mt-1 break-all max-w-full block">
+        {altText}
+      </span>
+      <button
+        type="button"
+        onClick={() => window.open(originalSrc, '_blank')}
+        className="mt-2 text-xs text-blue-500 hover:text-blue-700 underline"
+      >
+        Try opening directly
+      </button>
+    </span>
+  );
+
+  return (
+    <span className="block my-4">
+      <span className="flex flex-col items-center">
+        <span className="relative max-w-full border rounded-lg overflow-hidden shadow-sm block">
+          {imageFailed ? (
+            <FallbackImage originalSrc={src} altText={alt} />
+          ) : (
+            <>
+              {isR2Url || isDataUrl ? (
+                // For R2 URLs and data URLs, use unoptimized to avoid Next.js image optimization issues
+                <Image
+                  src={src}
+                  alt={alt || 'Document image'}
+                  width={800}
+                  height={400}
+                  className="max-w-full h-auto object-contain"
+                  style={{ maxHeight: '400px' }}
+                  unoptimized
+                  onError={(e) => {
+                    console.error('Image failed to load:', src);
+                    setImageFailed(true);
+                  }}
+                />
+              ) : (
+                // For other URLs, use normal Next.js optimization
+                <Image
+                  src={src}
+                  alt={alt || 'Document image'}
+                  width={800}
+                  height={400}
+                  className="max-w-full h-auto object-contain"
+                  style={{ maxHeight: '400px' }}
+                  onError={(e) => {
+                    console.error('Image failed to load:', src);
+                    setImageFailed(true);
+                  }}
+                />
+              )}
+            </>
+          )}
+        </span>
+        {alt && !imageFailed && (
+          <span className="text-sm text-gray-600 mt-2 text-center max-w-full break-words block">
+            {alt}
+          </span>
+        )}
+      </span>
+    </span>
+  );
+};
+
 const components: Partial<Components> = {
   // @ts-expect-error
   code: CodeBlock,
@@ -95,102 +195,7 @@ const components: Partial<Components> = {
       </h6>
     );
   },
-  img: ({ node, alt, src, ...props }) => {
-    if (!src) return null;
-
-    // Check if it's an R2 URL and handle it appropriately
-    const isR2Url =
-      src.includes('r2.cloudflarestorage.com') || src.includes('r2.dev');
-    const isDataUrl = src.startsWith('data:');
-
-    // Create a fallback image component for failed loads
-    const FallbackImage = ({
-      originalSrc,
-      altText,
-    }: { originalSrc: string; altText?: string }) => (
-      <span className="flex flex-col items-center justify-center p-8 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg block">
-        <span className="text-gray-500 mb-2 block">
-          <svg
-            className="w-12 h-12"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-            />
-          </svg>
-        </span>
-        <span className="text-sm text-gray-600 text-center block">
-          Image temporarily unavailable
-        </span>
-        <span className="text-xs text-gray-400 mt-1 break-all max-w-full block">
-          {altText}
-        </span>
-        <button
-          onClick={() => window.open(originalSrc, '_blank')}
-          className="mt-2 text-xs text-blue-500 hover:text-blue-700 underline"
-        >
-          Try opening directly
-        </button>
-      </span>
-    );
-
-    const [imageFailed, setImageFailed] = useState(false);
-
-    return (
-      <span className="block my-4">
-        <span className="flex flex-col items-center">
-          <span className="relative max-w-full border rounded-lg overflow-hidden shadow-sm block">
-            {imageFailed ? (
-              <FallbackImage originalSrc={src} altText={alt} />
-            ) : (
-              <>
-                {isR2Url || isDataUrl ? (
-                  // For R2 URLs and data URLs, use unoptimized to avoid Next.js image optimization issues
-                  <Image
-                    src={src}
-                    alt={alt || 'Document image'}
-                    width={800}
-                    height={400}
-                    className="max-w-full h-auto object-contain"
-                    style={{ maxHeight: '400px' }}
-                    unoptimized
-                    onError={(e) => {
-                      console.error('Image failed to load:', src);
-                      setImageFailed(true);
-                    }}
-                  />
-                ) : (
-                  // For other URLs, use normal Next.js optimization
-                  <Image
-                    src={src}
-                    alt={alt || 'Document image'}
-                    width={800}
-                    height={400}
-                    className="max-w-full h-auto object-contain"
-                    style={{ maxHeight: '400px' }}
-                    onError={(e) => {
-                      console.error('Image failed to load:', src);
-                      setImageFailed(true);
-                    }}
-                  />
-                )}
-              </>
-            )}
-          </span>
-          {alt && !imageFailed && (
-            <span className="text-sm text-gray-600 mt-2 text-center max-w-full break-words block">
-              {alt}
-            </span>
-          )}
-        </span>
-      </span>
-    );
-  },
+  img: (props) => <MarkdownImage {...props} />,
 };
 
 const remarkPlugins = [remarkGfm, remarkMath];
