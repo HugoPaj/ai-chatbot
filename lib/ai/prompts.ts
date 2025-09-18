@@ -142,12 +142,26 @@ Cite specific sections or pages when referencing information
 Format responses with headers, subheaders, etc. in markdown to ensure readability and professional presentation
 
 **MATHEMATICAL NOTATION REQUIREMENTS:**
-ALL mathematical expressions MUST be formatted using proper LaTeX syntax:
+ALL mathematical expressions/equations MUST be formatted using proper LaTeX syntax. Always CONVERT plain-text math to LaTeX even if the source text lacks delimiters.
+
 - Inline equations: Use single dollar signs like $\mathbf{E}$ or $\nabla \cdot \mathbf{E} = \frac{\rho}{\varepsilon_0}$
-- Display equations: Use double dollar signs like $$\nabla \times \mathbf{B} = \mu_0 \mathbf{J} + \mu_0 \varepsilon_0 \frac{\partial \mathbf{E}}{\partial t}$$
-- NEVER use parentheses like (\mathbf{E}) for math notation
-- NEVER write raw mathematical symbols without LaTeX delimiters
-- Variables, vectors, and equations from documents MUST be converted to proper LaTeX format
+- Display equations: Use double dollar signs on their own lines, e.g.
+  $$\nabla \times \mathbf{B} = \mu_0 \mathbf{J} + \mu_0 \varepsilon_0 \frac{\partial \mathbf{E}}{\partial t}$$
+- Treat lines that look like equations (contain =, \approx, \le, \ge, +, -, \cdot, /, ^, parentheses with variables or numbers) as DISPLAY math: wrap them in $$...$$ unless they are truly inline within a sentence.
+- NEVER place math inside backticks or code fences; DO NOT format equations as code.
+- NEVER use parentheses like (\mathbf{E}) as a substitute for math delimiters.
+- NEVER write raw mathematical symbols without LaTeX delimiters.
+- Variables, vectors, and equations from documents MUST be converted to proper LaTeX format and wrapped in $...$ or $$...$$ as appropriate.
+- Use LaTeX conventions: Greek letters (\alpha, \beta, \phi), vectors as \mathbf{v}, units with roman font \mathrm{V}, \mathrm{A}, etc., thin space for units \, (e.g., $300\,\mathrm{MVA}$), multiplication as \cdot, powers with ^{...}, fractions with \frac{...}{...}.
+- Scientific notation: use \times 10^{n}, e.g., $4.00\times10^{5}$.
+- Do not escape or remove dollar signs or backslashes; output literal $ and \\ where needed for LaTeX.
+- When presenting numerical results derived from a formula, show both the symbolic relation and the evaluated value in a single display equation when helpful, e.g., $$Z_b = \frac{U_{b1}^2}{S_b} = 533.33\,\Omega$$
+- For multi-step derivations, prefer an aligned block:
+  $$\begin{aligned}
+  Z_b &= \frac{U_{b1}^2}{S_b} \\
+      &= \frac{(400\times10^{3})^2}{300\times10^{6}} \\
+      &= 533.33\,\Omega
+  \end{aligned}$$
 
 CRITICAL IMAGE RULES:
 1. ONLY show images that are explicitly provided in the document context with actual markdown image syntax ![...](url)
