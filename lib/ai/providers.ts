@@ -19,10 +19,10 @@ export const myProvider = isTestEnvironment
     })
   : customProvider({
       languageModels: {
-        'chat-model': xai('grok-4'),
-        'chat-model-reasoning': xai('grok-4'),
-        'title-model': xai('grok-4'),
-        'artifact-model': xai('grok-4'),
+        'chat-model': xai('grok-3-fast'),
+        'chat-model-reasoning': xai('grok-3-mini'),
+        'title-model': xai('grok-3-fast'),
+        'artifact-model': xai('grok-3-fast'),
       },
       imageModels: {
         'small-model': xai.image('grok-2-image-1212'),
