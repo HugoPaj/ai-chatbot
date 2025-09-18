@@ -17,8 +17,15 @@ const r2Config = {
 
 // Validate R2 configuration
 const validateR2Config = () => {
-  const required = ['accountId', 'accessKeyId', 'secretAccessKey', 'bucketName'];
-  const missing = required.filter(key => !r2Config[key as keyof typeof r2Config]);
+  const required = [
+    'accountId',
+    'accessKeyId',
+    'secretAccessKey',
+    'bucketName',
+  ];
+  const missing = required.filter(
+    (key) => !r2Config[key as keyof typeof r2Config],
+  );
 
   if (missing.length > 0) {
     throw new Error(`Missing R2 configuration: ${missing.join(', ')}`);
@@ -57,7 +64,7 @@ export const put = async (
   options: {
     access?: 'public' | 'private';
     contentType?: string;
-  } = {}
+  } = {},
 ): Promise<R2UploadResponse> => {
   try {
     const client = getR2Client();
@@ -95,9 +102,17 @@ export const put = async (
     console.log('✅ [R2 DEBUG] Upload result:', result);
 
     // Generate public URL
+    // Note: For public access, you need to either:
+    // 1. Enable public access in R2 dashboard and use the pub-xxx.r2.dev domain
+    // 2. Set up a custom domain and set R2_PUBLIC_URL
     const publicUrl = r2Config.publicUrl
       ? `${r2Config.publicUrl}/${pathname}`
       : `https://${r2Config.accountId}.r2.cloudflarestorage.com/${r2Config.bucketName}/${pathname}`;
+
+    console.log(`🔗 [R2 DEBUG] Generated public URL: ${publicUrl}`);
+    console.log(
+      `ℹ️  [R2 DEBUG] Note: If you get authorization errors, enable public access in R2 dashboard`,
+    );
 
     const downloadUrl = publicUrl; // Same as URL for public access
 
@@ -110,7 +125,10 @@ export const put = async (
     console.error('❌ [R2 DEBUG] Upload failed:', error);
     console.error('❌ [R2 DEBUG] Error name:', error.name);
     console.error('❌ [R2 DEBUG] Error message:', error.message);
-    console.error('❌ [R2 DEBUG] Error code:', error.Code || error.$metadata?.httpStatusCode);
+    console.error(
+      '❌ [R2 DEBUG] Error code:',
+      error.Code || error.$metadata?.httpStatusCode,
+    );
     console.error('❌ [R2 DEBUG] Error details:', {
       name: error.name,
       code: error.Code,
@@ -118,7 +136,9 @@ export const put = async (
       requestId: error.$metadata?.requestId,
     });
 
-    throw new Error(`Failed to upload to R2: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Failed to upload to R2: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
   }
 };
 
@@ -135,7 +155,9 @@ export const del = async (pathname: string): Promise<void> => {
     await client.send(command);
   } catch (error) {
     console.error('R2 delete failed:', error);
-    throw new Error(`Failed to delete from R2: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Failed to delete from R2: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
   }
 };
 
