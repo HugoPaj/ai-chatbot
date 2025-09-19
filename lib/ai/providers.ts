@@ -21,6 +21,7 @@ export const myProvider = isTestEnvironment
       languageModels: {
         'chat-model': xai('grok-3-fast'),
         'chat-model-reasoning': xai('grok-3-mini'),
+        'chat-model-vision': xai('grok-2-vision-1212'), // For prompts with images
         'title-model': xai('grok-3-fast'),
         'artifact-model': xai('grok-3-fast'),
       },

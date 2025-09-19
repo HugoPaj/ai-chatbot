@@ -122,7 +122,7 @@ export async function POST(request: Request) {
     // Run database operations in parallel for better performance
     const [chat, previousMessages] = await Promise.all([
       getChatById({ id }),
-      getMessagesByChatId({ id })
+      getMessagesByChatId({ id }),
     ]);
 
     if (!chat) {
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
         userId: session.user.id,
         date: today,
       }),
-      createStreamId({ streamId, chatId: id })
+      createStreamId({ streamId, chatId: id }),
     ]);
 
     const stream = createDataStream({
@@ -356,10 +356,9 @@ export async function POST(request: Request) {
                   .map((doc) => doc.metadata.filename),
               ),
             );
-            } else {
-              console.log('[VectorStore] No relevant documents found for query.');
-            }
-
+          } else {
+            console.log('[VectorStore] No relevant documents found for query.');
+          }
         } catch (error) {
           console.error('Error retrieving similar documents:', error);
           // Continue without document context if there's an error
@@ -375,10 +374,30 @@ export async function POST(request: Request) {
           enhancedSystemPrompt += `\n\nRelevant engineering documents for reference:\n${documentContext}`;
         }
 
+        // Decide whether to use a vision-capable model based on attachments
+        const hasImageAttachment = Boolean(
+          message.experimental_attachments?.some((att) =>
+            att.contentType.startsWith('image/'),
+          ),
+        );
+
+        const resolvedModelId = hasImageAttachment
+          ? ('chat-model-vision' as const)
+          : selectedChatModel;
+
+        // Only strip attachments for non-vision models
+        const modelMessages = hasImageAttachment
+          ? (messages as any[])
+          : (messages as any[]).map((msg) => {
+              const { experimental_attachments, attachments, ...rest } =
+                msg as any;
+              return rest;
+            });
+
         const result = streamText({
-          model: myProvider.languageModel(selectedChatModel),
+          model: myProvider.languageModel(resolvedModelId),
           system: enhancedSystemPrompt,
-          messages,
+          messages: modelMessages,
           maxSteps: 5,
           experimental_activeTools:
             selectedChatModel === 'chat-model-reasoning'
@@ -391,7 +410,7 @@ export async function POST(request: Request) {
                 ],
           experimental_transform: smoothStream({
             chunking: 'word',
-            delayInMs: 5 // Smooth streaming at 200 chars/second
+            delayInMs: 5, // Smooth streaming at 200 chars/second
           }),
           experimental_generateMessageId: generateUUID,
           tools: {
@@ -443,7 +462,10 @@ export async function POST(request: Request) {
             }
 
             // Send sources data if available
-            console.log(`[DEBUG] Document sources count: ${documentSources.length}`, documentSources);
+            console.log(
+              `[DEBUG] Document sources count: ${documentSources.length}`,
+              documentSources,
+            );
             if (documentSources.length > 0) {
               console.log('[DEBUG] Sending sources data:', documentSources);
               dataStream.writeData({

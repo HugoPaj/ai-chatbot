@@ -56,6 +56,7 @@ export interface R2UploadResponse {
   url: string;
   pathname: string;
   downloadUrl: string;
+  contentType?: string;
 }
 
 export const put = async (
@@ -105,9 +106,15 @@ export const put = async (
     // Note: For public access, you need to either:
     // 1. Enable public access in R2 dashboard and use the pub-xxx.r2.dev domain
     // 2. Set up a custom domain and set R2_PUBLIC_URL
+    // Ensure the key/path segment is URL-safe (spaces, unicode, etc.)
+    const encodedPathname = pathname
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+
     const publicUrl = r2Config.publicUrl
-      ? `${r2Config.publicUrl}/${pathname}`
-      : `https://${r2Config.accountId}.r2.cloudflarestorage.com/${r2Config.bucketName}/${pathname}`;
+      ? `${r2Config.publicUrl}/${encodedPathname}`
+      : `https://${r2Config.accountId}.r2.cloudflarestorage.com/${r2Config.bucketName}/${encodedPathname}`;
 
     console.log(`🔗 [R2 DEBUG] Generated public URL: ${publicUrl}`);
     console.log(
@@ -120,6 +127,7 @@ export const put = async (
       url: publicUrl,
       pathname,
       downloadUrl,
+      contentType: uploadParams.ContentType,
     };
   } catch (error: any) {
     console.error('❌ [R2 DEBUG] Upload failed:', error);
