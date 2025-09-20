@@ -97,6 +97,7 @@ const PurePreviewMessage = ({
               const { type } = part;
               const key = `message-${message.id}-part-${index}`;
 
+
               if (type === 'reasoning') {
                 return (
                   <MessageReasoning
@@ -159,9 +160,10 @@ const PurePreviewMessage = ({
                 }
               }
 
-              if (type === 'tool-invocation') {
+              if (type.startsWith('tool-')) {
                 const partWithToolData = part as any;
-                const { toolName, toolCallId, state } = partWithToolData;
+                const toolName = type.replace('tool-', ''); // Extract tool name from type
+                const { toolCallId, state } = partWithToolData;
 
                 if (state === 'call') {
                   const { args } = partWithToolData;
@@ -194,32 +196,33 @@ const PurePreviewMessage = ({
                   );
                 }
 
-                if (state === 'result') {
-                  const { result } = partWithToolData;
+                if (state === 'result' || state === 'output-available') {
+                  const { result, output } = partWithToolData;
+                  const toolResult = result || output;
 
                   return (
                     <div key={toolCallId}>
                       {toolName === 'getWeather' ? (
-                        <Weather weatherAtLocation={result} />
+                        <Weather weatherAtLocation={toolResult} />
                       ) : toolName === 'createDocument' ? (
                         <DocumentPreview
                           isReadonly={isReadonly}
-                          result={result}
+                          result={toolResult}
                         />
                       ) : toolName === 'updateDocument' ? (
                         <DocumentToolResult
                           type="update"
-                          result={result}
+                          result={toolResult}
                           isReadonly={isReadonly}
                         />
                       ) : toolName === 'requestSuggestions' ? (
                         <DocumentToolResult
                           type="request-suggestions"
-                          result={result}
+                          result={toolResult}
                           isReadonly={isReadonly}
                         />
                       ) : (
-                        <pre>{JSON.stringify(result, null, 2)}</pre>
+                        <pre>{JSON.stringify(toolResult, null, 2)}</pre>
                       )}
                     </div>
                   );

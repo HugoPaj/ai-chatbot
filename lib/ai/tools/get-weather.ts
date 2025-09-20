@@ -4,9 +4,9 @@ import { z } from 'zod/v3';
 export const getWeather = tool({
   description: 'Get the current weather at a location',
   inputSchema: z.object({
-    latitude: z.number(),
-    longitude: z.number(),
-  }),
+    latitude: z.number().describe('The latitude coordinate'),
+    longitude: z.number().describe('The longitude coordinate'),
+  }).describe('Weather request parameters'),
   execute: async ({ latitude, longitude }) => {
     const response = await fetch(
       `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m&hourly=temperature_2m&daily=sunrise,sunset&timezone=auto`,
