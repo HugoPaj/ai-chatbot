@@ -33,6 +33,8 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
       'chat-model2',
       'chat-model3',
       'chat-model4',
+      'chat-model5',
+      'chat-model6',
       'chat-model-reasoning',
     ],
   },
@@ -48,6 +50,9 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
       'chat-model3',
       'chat-model4',
       'chat-model-reasoning',
+      // OpenAI models available to admin users
+      'chat-model5',
+      'chat-model6',
     ],
   },
 };
