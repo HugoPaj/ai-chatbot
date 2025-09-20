@@ -22,6 +22,7 @@ import { MessageReasoning } from './message-reasoning';
 import { SourcesDisplay } from './sources-display';
 import { useSources } from '@/hooks/use-sources';
 import { ImageGeneration } from './image-generation';
+import { ToolCallIndicator } from './tool-call-indicator';
 
 const PurePreviewMessage = ({
   chatId,
@@ -162,12 +163,20 @@ const PurePreviewMessage = ({
                 }
               }
 
-              if (type.startsWith('tool-')) {
+              if (type.startsWith('tool-') || type === 'tool-call') {
                 const partWithToolData = part as any;
-                const toolName = type.replace('tool-', ''); // Extract tool name from type
+                const toolName =
+                  type === 'tool-call'
+                    ? partWithToolData.toolName || 'unknown'
+                    : type.replace('tool-', ''); // Extract tool name from type
                 const { toolCallId, state } = partWithToolData;
 
-                if (state === 'call') {
+                if (
+                  state === 'call' ||
+                  state === 'partial-call' ||
+                  state === 'input-available' ||
+                  state === 'executing'
+                ) {
                   const { args } = partWithToolData;
 
                   return (
@@ -180,27 +189,41 @@ const PurePreviewMessage = ({
                       })}
                     >
                       {toolName === 'getWeather' ? (
-                        <Weather />
+                        <>
+                          <ToolCallIndicator toolName={toolName} args={args} />
+                          <Weather />
+                        </>
                       ) : toolName === 'createDocument' ? (
                         <DocumentPreview isReadonly={isReadonly} args={args} />
                       ) : toolName === 'updateDocument' ? (
-                        <DocumentToolCall
-                          type="update"
-                          args={args}
-                          isReadonly={isReadonly}
-                        />
+                        <>
+                          <ToolCallIndicator toolName={toolName} args={args} />
+                          <DocumentToolCall
+                            type="update"
+                            args={args}
+                            isReadonly={isReadonly}
+                          />
+                        </>
                       ) : toolName === 'requestSuggestions' ? (
-                        <DocumentToolCall
-                          type="request-suggestions"
-                          args={args}
-                          isReadonly={isReadonly}
-                        />
+                        <>
+                          <ToolCallIndicator toolName={toolName} args={args} />
+                          <DocumentToolCall
+                            type="request-suggestions"
+                            args={args}
+                            isReadonly={isReadonly}
+                          />
+                        </>
                       ) : toolName === 'generateImage' ? (
-                        <ImageGeneration
-                          isGenerating={true}
-                          prompt={args?.prompt}
-                        />
-                      ) : null}
+                        <>
+                          <ToolCallIndicator toolName={toolName} args={args} />
+                          <ImageGeneration
+                            isGenerating={true}
+                            prompt={args?.prompt}
+                          />
+                        </>
+                      ) : (
+                        <ToolCallIndicator toolName={toolName} args={args} />
+                      )}
                     </div>
                   );
                 }
@@ -211,6 +234,14 @@ const PurePreviewMessage = ({
 
                   return (
                     <div key={toolCallId}>
+                      {/* Show completed tool indicator for better UX */}
+                      <ToolCallIndicator
+                        toolName={toolName}
+                        args={partWithToolData.args || result || output}
+                        isCompleted={true}
+                        className="mb-3"
+                      />
+
                       {toolName === 'getWeather' ? (
                         <Weather weatherAtLocation={toolResult} />
                       ) : toolName === 'createDocument' ? (

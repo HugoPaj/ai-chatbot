@@ -45,72 +45,22 @@ export function ImageGeneration({
   }
 
   if (isGenerating) {
-    return (
-      <motion.div
-        className="border rounded-lg p-4 bg-blue-50 border-blue-200"
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.2 }}
-      >
-        <div className="flex items-center gap-2 text-blue-700">
-          <div className="flex gap-1">
-            <motion.div
-              className="size-2 bg-blue-500 rounded-full"
-              animate={{
-                scale: [1, 1.2, 1],
-                opacity: [0.5, 1, 0.5],
-              }}
-              transition={{
-                duration: 1.5,
-                repeat: Number.POSITIVE_INFINITY,
-                delay: 0,
-              }}
-            />
-            <motion.div
-              className="size-2 bg-blue-500 rounded-full"
-              animate={{
-                scale: [1, 1.2, 1],
-                opacity: [0.5, 1, 0.5],
-              }}
-              transition={{
-                duration: 1.5,
-                repeat: Number.POSITIVE_INFINITY,
-                delay: 0.2,
-              }}
-            />
-            <motion.div
-              className="size-2 bg-blue-500 rounded-full"
-              animate={{
-                scale: [1, 1.2, 1],
-                opacity: [0.5, 1, 0.5],
-              }}
-              transition={{
-                duration: 1.5,
-                repeat: Number.POSITIVE_INFINITY,
-                delay: 0.4,
-              }}
-            />
-          </div>
-          <span className="font-medium">Generating image{dots}</span>
-        </div>
-        {prompt && (
-          <p className="text-blue-600 text-sm mt-2">&quot;{prompt}&quot;</p>
-        )}
-      </motion.div>
-    );
+    return null;
   }
 
   if (imageData) {
     return (
       <motion.div
-        className="border rounded-lg overflow-hidden bg-white"
-        initial={{ opacity: 0, scale: 0.95 }}
+        className="border rounded-lg overflow-hidden bg-card"
+        initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.3 }}
       >
         {prompt && (
-          <div className="px-3 py-2 bg-gray-50 border-b">
-            <p className="text-sm text-gray-600">&quot;{prompt}&quot;</p>
+          <div className="px-3 py-2 bg-muted/30 border-b">
+            <p className="text-xs text-muted-foreground">
+              &quot;{prompt}&quot;
+            </p>
           </div>
         )}
         <div className="p-2">
