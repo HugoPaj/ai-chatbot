@@ -472,11 +472,6 @@ export async function POST(request: Request) {
                     (message) => message.role === 'assistant',
                   );
 
-                  console.log(
-                    'Assistant messages from response:',
-                    assistantMessages,
-                  );
-
                   let assistantId = getTrailingMessageId({
                     // @ts-expect-error: response.messages type mismatch with ResponseMessage[] in v5
                     messages: assistantMessages,
@@ -485,23 +480,13 @@ export async function POST(request: Request) {
                   // Generate a new ID if one doesn't exist
                   if (!assistantId) {
                     assistantId = generateUUID();
-                    console.log('Generated new assistant ID:', assistantId);
                   }
-
-                  console.log('Using assistant ID:', assistantId);
 
                   const assistantMessage = response.messages.find(
                     (m) => m.role === 'assistant',
                   ) as UIMessage | undefined;
 
                   if (assistantMessage) {
-                    console.log('Saving assistant message:', {
-                      id: assistantId,
-                      role: assistantMessage.role,
-                      parts: assistantMessage.parts,
-                      content: (assistantMessage as any).content,
-                    });
-
                     // Handle AI SDK v5 content structure - content might be an array of parts
                     let messageParts: Array<{ type: string; text: string }>;
                     const rawContent = (assistantMessage as any).content;
@@ -511,8 +496,33 @@ export async function POST(request: Request) {
                       Array.isArray(assistantMessage.parts) &&
                       assistantMessage.parts.length > 0
                     ) {
-                      // Use existing parts if available
-                      messageParts = assistantMessage.parts;
+                      // Use existing parts if available, but filter and convert to expected format
+                      messageParts = assistantMessage.parts
+                        .map((part: any) => {
+                          if (
+                            part.type === 'text' &&
+                            typeof part.text === 'string'
+                          ) {
+                            return { type: 'text', text: part.text };
+                          }
+                          // Handle other part types that might not have text
+                          if (
+                            part.type === 'dynamic-tool' ||
+                            part.type === 'tool-call'
+                          ) {
+                            return { type: part.type, text: '' };
+                          }
+                          // Fallback for unknown part types
+                          return {
+                            type: part.type || 'text',
+                            text: part.text || '',
+                          };
+                        })
+                        .filter(
+                          (part): part is { type: string; text: string } =>
+                            typeof part.type === 'string' &&
+                            typeof part.text === 'string',
+                        );
                     } else if (Array.isArray(rawContent)) {
                       // Content is an array (AI SDK v5 format) - convert to parts
                       messageParts = rawContent.map((item: any) => ({
@@ -526,8 +536,6 @@ export async function POST(request: Request) {
                       // Fallback for unknown format
                       messageParts = [{ type: 'text', text: '' }];
                     }
-
-                    console.log('Processed message parts:', messageParts);
 
                     /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
                     await saveMessages({
@@ -546,7 +554,6 @@ export async function POST(request: Request) {
                         },
                       ],
                     });
-                    console.log('Assistant message saved successfully');
                   }
                 } catch (error) {
                   console.error('Failed to save assistant message:', error);
