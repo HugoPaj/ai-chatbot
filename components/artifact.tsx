@@ -337,6 +337,7 @@ function PureArtifact({
                     attachments={attachments}
                     setAttachments={setAttachments}
                     messages={messages}
+                    initialMessages={messages}
                     append={append}
                     className="bg-background dark:bg-muted"
                     setMessages={setMessages}

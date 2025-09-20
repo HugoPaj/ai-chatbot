@@ -27,8 +27,9 @@ export function useArtifactSelector<Selected>(selector: Selector<Selected>) {
   });
 
   const selectedValue = useMemo(() => {
-    if (!localArtifact) return selector(initialArtifactData);
-    return selector(localArtifact);
+    // Ensure we always have a valid artifact object to pass to the selector
+    const artifactData = localArtifact ?? initialArtifactData;
+    return selector(artifactData);
   }, [localArtifact, selector]);
 
   return selectedValue;
@@ -44,14 +45,13 @@ export function useArtifact() {
   );
 
   const artifact = useMemo(() => {
-    if (!localArtifact) return initialArtifactData;
-    return localArtifact;
+    return localArtifact ?? initialArtifactData;
   }, [localArtifact]);
 
   const setArtifact = useCallback(
     (updaterFn: UIArtifact | ((currentArtifact: UIArtifact) => UIArtifact)) => {
       setLocalArtifact((currentArtifact) => {
-        const artifactToUpdate = currentArtifact || initialArtifactData;
+        const artifactToUpdate = currentArtifact ?? initialArtifactData;
 
         if (typeof updaterFn === 'function') {
           return updaterFn(artifactToUpdate);

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import Image from 'next/image';
 
 interface ImageGenerationProps {
   isGenerating?: boolean;
@@ -15,7 +15,7 @@ export function ImageGeneration({
   isGenerating = false,
   imageData,
   prompt,
-  error
+  error,
 }: ImageGenerationProps) {
   const [dots, setDots] = useState('');
 
@@ -23,9 +23,9 @@ export function ImageGeneration({
     if (!isGenerating) return;
 
     const interval = setInterval(() => {
-      setDots(prev => {
+      setDots((prev) => {
         if (prev.length >= 3) return '';
-        return prev + '.';
+        return `${prev}.`;
       });
     }, 500);
 
@@ -58,45 +58,43 @@ export function ImageGeneration({
               className="size-2 bg-blue-500 rounded-full"
               animate={{
                 scale: [1, 1.2, 1],
-                opacity: [0.5, 1, 0.5]
+                opacity: [0.5, 1, 0.5],
               }}
               transition={{
                 duration: 1.5,
-                repeat: Infinity,
-                delay: 0
+                repeat: Number.POSITIVE_INFINITY,
+                delay: 0,
               }}
             />
             <motion.div
               className="size-2 bg-blue-500 rounded-full"
               animate={{
                 scale: [1, 1.2, 1],
-                opacity: [0.5, 1, 0.5]
+                opacity: [0.5, 1, 0.5],
               }}
               transition={{
                 duration: 1.5,
-                repeat: Infinity,
-                delay: 0.2
+                repeat: Number.POSITIVE_INFINITY,
+                delay: 0.2,
               }}
             />
             <motion.div
               className="size-2 bg-blue-500 rounded-full"
               animate={{
                 scale: [1, 1.2, 1],
-                opacity: [0.5, 1, 0.5]
+                opacity: [0.5, 1, 0.5],
               }}
               transition={{
                 duration: 1.5,
-                repeat: Infinity,
-                delay: 0.4
+                repeat: Number.POSITIVE_INFINITY,
+                delay: 0.4,
               }}
             />
           </div>
           <span className="font-medium">Generating image{dots}</span>
         </div>
         {prompt && (
-          <p className="text-blue-600 text-sm mt-2">
-            "{prompt}"
-          </p>
+          <p className="text-blue-600 text-sm mt-2">&quot;{prompt}&quot;</p>
         )}
       </motion.div>
     );
@@ -112,13 +110,15 @@ export function ImageGeneration({
       >
         {prompt && (
           <div className="px-3 py-2 bg-gray-50 border-b">
-            <p className="text-sm text-gray-600">"{prompt}"</p>
+            <p className="text-sm text-gray-600">&quot;{prompt}&quot;</p>
           </div>
         )}
         <div className="p-2">
-          <img
+          <Image
             src={`data:image/png;base64,${imageData}`}
             alt={prompt || 'Generated image'}
+            width={512}
+            height={512}
             className="w-full h-auto rounded"
             style={{ maxHeight: '512px', objectFit: 'contain' }}
           />

@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useArtifactSelector } from '@/hooks/use-artifact';
 
@@ -151,13 +152,14 @@ export function Console({ consoleOutputs, setConsoleOutputs }: ConsoleProps) {
                 <div className="dark:text-zinc-50 text-zinc-900 w-full flex flex-col gap-2 overflow-x-scroll">
                   {consoleOutput.contents.map((content, index) =>
                     content.type === 'image' ? (
-                      <picture key={`${consoleOutput.id}-${index}`}>
-                        <img
-                          src={content.value}
-                          alt="output"
-                          className="rounded-md max-w-screen-toast-mobile w-full"
-                        />
-                      </picture>
+                      <Image
+                        key={`${consoleOutput.id}-${index}`}
+                        src={content.value}
+                        alt="output"
+                        width={400}
+                        height={300}
+                        className="rounded-md max-w-screen-toast-mobile w-full"
+                      />
                     ) : (
                       <div
                         key={`${consoleOutput.id}-${index}`}
