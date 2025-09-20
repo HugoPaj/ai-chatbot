@@ -38,6 +38,8 @@ export const postRequestBodySchema = z.object({
     'chat-model2',
     'chat-model3',
     'chat-model4',
+    'chat-model5',
+    'chat-model6',
     'chat-model-reasoning',
     'chat-model-vision',
   ]),

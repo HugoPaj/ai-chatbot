@@ -21,6 +21,7 @@ import { DocumentPreview } from './document-preview';
 import { MessageReasoning } from './message-reasoning';
 import { SourcesDisplay } from './sources-display';
 import { useSources } from '@/hooks/use-sources';
+import { ImageGeneration } from './image-generation';
 
 const PurePreviewMessage = ({
   chatId,
@@ -172,7 +173,7 @@ const PurePreviewMessage = ({
                     <div
                       key={toolCallId}
                       className={cx({
-                        skeleton: ['getWeather'].includes(toolName),
+                        skeleton: ['getWeather', 'generateImage'].includes(toolName),
                       })}
                     >
                       {toolName === 'getWeather' ? (
@@ -190,6 +191,11 @@ const PurePreviewMessage = ({
                           type="request-suggestions"
                           args={args}
                           isReadonly={isReadonly}
+                        />
+                      ) : toolName === 'generateImage' ? (
+                        <ImageGeneration
+                          isGenerating={true}
+                          prompt={args?.prompt}
                         />
                       ) : null}
                     </div>
@@ -220,6 +226,13 @@ const PurePreviewMessage = ({
                           type="request-suggestions"
                           result={toolResult}
                           isReadonly={isReadonly}
+                        />
+                      ) : toolName === 'generateImage' ? (
+                        <ImageGeneration
+                          isGenerating={false}
+                          imageData={toolResult?.imageData}
+                          prompt={toolResult?.prompt}
+                          error={toolResult?.error}
                         />
                       ) : (
                         <pre>{JSON.stringify(toolResult, null, 2)}</pre>
