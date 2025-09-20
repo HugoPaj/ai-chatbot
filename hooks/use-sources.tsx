@@ -1,42 +1,79 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useChat } from '@ai-sdk/react';
-import type { DataStreamDelta } from '@/components/data-stream-handler';
+import { useState, useCallback, useEffect } from 'react';
 
 interface UseSourcesParams {
   chatId: string;
 }
 
+// Global storage for sources per chat
+const globalSources: Record<string, string[]> = {};
+
+// Function to set sources globally (called from API or other places)
+export function setGlobalSources(chatId: string, sources: string[]) {
+  globalSources[chatId] = sources;
+  // Trigger a custom event to notify hooks
+  window.dispatchEvent(
+    new CustomEvent('sourcesUpdated', { detail: { chatId, sources } }),
+  );
+}
+
 export function useSources({ chatId }: UseSourcesParams) {
-  const [sources, setSources] = useState<Record<string, string[]>>({});
-  // Note: In AI SDK v5, the 'data' property has been removed from useChat
-  // This hook may need to be refactored to work with the new streaming system
-  const { messages } = useChat({ id: chatId });
+  const [sources, setSources] = useState<string[]>(
+    () => globalSources[chatId] || [],
+  );
 
   useEffect(() => {
-    // TODO: Implement source extraction from messages in AI SDK v5
-    // The previous dataStream approach is no longer available
-    // Sources might now be embedded in message parts or handled differently
-    // For now, this hook is disabled until we implement the new approach
-  }, [messages, chatId]);
+    const handleSourcesUpdate = (event: CustomEvent) => {
+      if (event.detail.chatId === chatId) {
+        setSources(event.detail.sources);
+      }
+    };
+
+    window.addEventListener(
+      'sourcesUpdated',
+      handleSourcesUpdate as EventListener,
+    );
+
+    // Also check for any existing sources
+    if (globalSources[chatId]) {
+      setSources(globalSources[chatId]);
+    }
+
+    return () => {
+      window.removeEventListener(
+        'sourcesUpdated',
+        handleSourcesUpdate as EventListener,
+      );
+    };
+  }, [chatId]);
+
+  const handleSourceData = useCallback(
+    (dataPart: any) => {
+      // Handle sources data from AI SDK v5 streaming
+      if (
+        dataPart?.type === 'data-sources' &&
+        dataPart?.data?.type === 'sources' &&
+        Array.isArray(dataPart.data.sources)
+      ) {
+        setGlobalSources(chatId, dataPart.data.sources);
+      }
+    },
+    [chatId],
+  );
 
   const getSourcesForMessage = (messageId?: string): string[] => {
-    // For now, return the latest sources for the chat
-    // Could be enhanced to return sources specific to a message ID
-    return sources[chatId] || [];
+    return sources;
   };
 
   const clearSources = () => {
-    setSources((prev) => ({
-      ...prev,
-      [chatId]: [],
-    }));
+    setGlobalSources(chatId, []);
   };
 
   return {
-    sources: sources[chatId] || [],
+    sources,
     getSourcesForMessage,
     clearSources,
+    handleSourceData,
   };
 }

@@ -20,6 +20,7 @@ import type { Session } from 'next-auth';
 import { useSearchParams } from 'next/navigation';
 import { useChatVisibility } from '@/hooks/use-chat-visibility';
 import { useAutoResume } from '@/hooks/use-auto-resume';
+import { useSources, setGlobalSources } from '@/hooks/use-sources';
 import { ChatSDKError } from '@/lib/errors';
 import { usePerformanceMonitor } from '@/lib/performance-monitor';
 
@@ -50,6 +51,64 @@ export function Chat({
   const { startRequest, recordFirstToken, recordStreamComplete, logMetrics } =
     usePerformanceMonitor();
 
+  const { handleSourceData } = useSources({ chatId: id });
+
+  // Custom fetch function to intercept sources
+  const customFetch = async (url: string, options: any) => {
+    const response = await fetchWithErrorHandlers(url, options);
+
+    if (response.body) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const readableStream = new ReadableStream({
+        start(controller) {
+          function pump(): any {
+            return reader.read().then(({ done, value }) => {
+              if (done) {
+                controller.close();
+                return;
+              }
+
+              const chunk = decoder.decode(value, { stream: true });
+              buffer += chunk;
+
+              // Look for sources data in the stream
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.slice(6));
+                    if (data.type === 'data-sources' && data.data?.sources) {
+                      setGlobalSources(id, data.data.sources);
+                    }
+                  } catch (e) {
+                    // Ignore parsing errors
+                  }
+                }
+              }
+
+              controller.enqueue(value);
+              return pump();
+            });
+          }
+          return pump();
+        },
+      });
+
+      return new Response(readableStream, {
+        headers: response.headers,
+        status: response.status,
+        statusText: response.statusText,
+      });
+    }
+
+    return response;
+  };
+
   const { messages, setMessages, status, stop, sendMessage, regenerate } =
     useChat({
       id,
@@ -58,7 +117,7 @@ export function Chat({
       // Dynamically import to avoid ESM type issues
       transport: new (require('ai').DefaultChatTransport)({
         api: '/api/chat',
-        fetch: fetchWithErrorHandlers,
+        fetch: customFetch,
         prepareSendMessagesRequest: ({
           id: chatId,
           messages: msgs,
@@ -72,6 +131,9 @@ export function Chat({
           },
         }),
       }),
+      onData: (dataPart) => {
+        handleSourceData(dataPart);
+      },
       onFinish: () => {
         recordStreamComplete(id);
         logMetrics(id);

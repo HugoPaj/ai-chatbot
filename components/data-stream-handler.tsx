@@ -24,15 +24,15 @@ export type DataStreamDelta = {
 };
 
 export function DataStreamHandler({ id }: { id: string }) {
-  /* FIXME(@ai-sdk-upgrade-v5): The 'data' property has been removed from useChat in v5.
-     This component needs to be migrated to use the new streaming API or alternative event handling.
-     Currently disabled to allow build to pass. */
-  // const { data: dataStream } = useChat({ id });
-  // const { artifact, setArtifact, setMetadata } = useArtifact(); // Disabled for AI SDK v5 migration
+  // In AI SDK v5, data streaming is handled differently
+  // Most data stream handling is now done in individual hooks like useSources
+  // This component is kept minimal for potential future data stream handling
   const lastProcessedIndex = useRef(-1);
 
   useEffect(() => {
-    // Temporarily disabled - needs migration to AI SDK v5 streaming API
+    // Data stream handling is now distributed to specific hooks
+    // Sources are handled in useSources hook
+    // Artifacts would be handled in useArtifact hook when re-enabled
     return;
 
     /* Original v4 code - needs migration:

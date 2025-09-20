@@ -85,19 +85,20 @@ const PurePreviewMessage = ({
                   data-testid={`message-attachments`}
                   className="flex flex-row justify-end gap-2"
                 >
-                  {(message as any).experimental_attachments.map((attachment: Attachment) => (
-                    <PreviewAttachment
-                      key={attachment.url}
-                      attachment={attachment}
-                    />
-                  ))}
+                  {(message as any).experimental_attachments.map(
+                    (attachment: Attachment) => (
+                      <PreviewAttachment
+                        key={attachment.url}
+                        attachment={attachment}
+                      />
+                    ),
+                  )}
                 </div>
               )}
 
             {message.parts?.map((part, index) => {
               const { type } = part;
               const key = `message-${message.id}-part-${index}`;
-
 
               if (type === 'reasoning') {
                 return (
@@ -173,7 +174,9 @@ const PurePreviewMessage = ({
                     <div
                       key={toolCallId}
                       className={cx({
-                        skeleton: ['getWeather', 'generateImage'].includes(toolName),
+                        skeleton: ['getWeather', 'generateImage'].includes(
+                          toolName,
+                        ),
                       })}
                     >
                       {toolName === 'getWeather' ? (
