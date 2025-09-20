@@ -9,8 +9,17 @@ import {
 } from '@/lib/db/queries';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { myProvider } from '@/lib/ai/providers';
+import { chatModels } from '@/lib/ai/models';
 
 export async function saveChatModelAsCookie(model: string) {
+  // Validate that the model exists in our available models
+  const validModels = chatModels.map((m) => m.id);
+  if (!validModels.includes(model)) {
+    throw new Error(
+      `Invalid model: ${model}. Available models: ${validModels.join(', ')}`,
+    );
+  }
+
   const cookieStore = await cookies();
   cookieStore.set('chat-model', model);
 }

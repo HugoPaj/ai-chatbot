@@ -5,7 +5,8 @@ import { auth } from '@/app/(auth)/auth';
 import { Chat } from '@/components/chat';
 import { getChatById, getMessagesByChatId } from '@/lib/db/queries';
 import { DataStreamHandler } from '@/components/data-stream-handler';
-import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
+import { chatModels, getDefaultChatModelForUser } from '@/lib/ai/models';
+import { entitlementsByUserType } from '@/lib/ai/entitlements';
 import type { DBMessage } from '@/lib/db/schema';
 import type { UIMessage } from 'ai';
 import type { Attachment } from '@/lib/types';
@@ -56,13 +57,28 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
   const cookieStore = await cookies();
   const chatModelFromCookie = cookieStore.get('chat-model');
 
-  if (!chatModelFromCookie) {
+  // Validate that the cookie contains a valid model ID and user has access
+  const validModelIds = chatModels.map((m) => m.id);
+  const userType = session?.user?.type || 'guest';
+  const userAvailableModels =
+    entitlementsByUserType[userType]?.availableChatModelIds || [];
+  const isValidModelId =
+    chatModelFromCookie?.value &&
+    validModelIds.includes(chatModelFromCookie.value) &&
+    userAvailableModels.includes(chatModelFromCookie.value);
+
+  const defaultModelForUser = getDefaultChatModelForUser(
+    userType,
+    entitlementsByUserType,
+  );
+
+  if (!chatModelFromCookie || !isValidModelId) {
     return (
       <>
         <Chat
           id={chat.id}
           initialMessages={convertToUIMessages(messagesFromDb)}
-          initialChatModel={DEFAULT_CHAT_MODEL}
+          initialChatModel={defaultModelForUser}
           initialVisibilityType={chat.visibility}
           isReadonly={session?.user?.id !== chat.userId}
           session={session}

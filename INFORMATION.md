@@ -252,3 +252,229 @@ If you encounter issues:
 2. Verify environment variables are set correctly
 3. Ensure webhook endpoint is accessible
 4. Check application logs for error details
+
+# Multi-Model Chat System
+
+## 🧠 Overview
+
+The application supports multiple AI models with user-type-based access control. Each user type has access to different models based on their subscription tier, ensuring appropriate model access while providing fallback mechanisms for invalid configurations.
+
+## 🤖 Available Models
+
+### Model Configuration (`lib/ai/models.ts`)
+
+| Model ID | Model Name | Description | Provider | Use Case |
+|----------|------------|-------------|----------|----------|
+| `chat-model1` | Claude 4 Sonnet | Primary model | Anthropic | General conversations (Premium users) |
+| `chat-model2` | Claude Opus 4 | Most powerful model and slowest | Anthropic | Complex reasoning tasks |
+| `chat-model3` | Claude 3.5 Haiku | Fastest model | Anthropic | Quick responses (Guest default) |
+| `chat-model4` | Grok 4 | Grok 4 | xAI | Alternative perspective |
+| `chat-model-reasoning` | Reasoning Model | Uses advanced reasoning | Anthropic | Complex problem solving |
+| `chat-model-vision` | Claude 4 Sonnet | For prompts with images | Anthropic | Image analysis (auto-selected) |
+
+### Specialized Models
+- **`title-model`**: Claude 3.5 Haiku - Used for generating chat titles
+- **`artifact-model`**: Claude 3.5 Sonnet - Used for creating documents/artifacts
+
+## 👥 User Access Matrix
+
+### Model Entitlements (`lib/ai/entitlements.ts`)
+
+| User Type | Available Models | Default Model | Max Requests/Day |
+|-----------|------------------|---------------|------------------|
+| **Guest** | `chat-model3`, `chat-model-reasoning` | `chat-model3` | 5 |
+| **Free** | All models | `chat-model1` | 5 |
+| **Premium** | `chat-model1`, `chat-model-reasoning` | `chat-model1` | Unlimited |
+| **Admin** | `chat-model1`, `chat-model-reasoning` | `chat-model1` | Unlimited |
+
+## 🔄 Model Selection Flow
+
+### 1. Cookie-Based Model Persistence
+
+```typescript
+// User's model preference is stored in browser cookie
+cookieStore.set('chat-model', selectedModelId);
+```
+
+### 2. Smart Default Selection (`getDefaultChatModelForUser`)
+
+The system intelligently selects appropriate default models:
+
+```typescript
+export function getDefaultChatModelForUser(
+  userType: string,
+  entitlementsByUserType: any,
+): string {
+  // Returns first available model from user's entitlement list
+  const userEntitlements = entitlementsByUserType[userType];
+  return userEntitlements.availableChatModelIds[0];
+}
+```
+
+**Results:**
+- 🔹 **Guest users** → `chat-model3` (Claude 3.5 Haiku)
+- 🔹 **Free users** → `chat-model1` (Claude 4 Sonnet)  
+- 🔹 **Premium users** → `chat-model1` (Claude 4 Sonnet)
+- 🔹 **Admin users** → `chat-model1` (Claude 4 Sonnet)
+
+### 3. Cookie Validation Process
+
+The system performs **3-layer validation** before using a saved model:
+
+```typescript
+// 1. Valid model ID exists in system
+const validModelIds = chatModels.map((m) => m.id);
+
+// 2. User has permission to access this model
+const userAvailableModels = entitlementsByUserType[userType]?.availableChatModelIds || [];
+
+// 3. All conditions met
+const isValidModelId =
+  modelIdFromCookie?.value &&
+  validModelIds.includes(modelIdFromCookie.value) &&
+  userAvailableModels.includes(modelIdFromCookie.value);
+```
+
+## 🛡️ Security & Access Control
+
+### Permission Enforcement
+
+1. **Frontend**: Model selector only shows models user has access to
+2. **Backend**: API validates selected model against user entitlements
+3. **Cookie**: Invalid/unauthorized models trigger fallback to user's default
+
+### Fallback Mechanisms
+
+| Scenario | Fallback Action |
+|----------|-----------------|
+| No cookie set | Use user-type default model |
+| Invalid model ID | Use user-type default model |
+| User lacks permission | Use user-type default model |
+| Unknown user type | Use guest default (`chat-model3`) |
+
+## 🔧 Implementation Details
+
+### Files Modified for Multi-Model Support
+
+#### Core Logic
+- **`lib/ai/models.ts`**: Model definitions and default selection logic
+- **`lib/ai/providers.ts`**: AI provider configuration with model mappings
+- **`lib/ai/entitlements.ts`**: User-type access control matrix
+- **`app/(chat)/actions.ts`**: Model validation in cookie saving
+
+#### Pages & Routes
+- **`app/(chat)/page.tsx`**: New chat model validation
+- **`app/(chat)/chat/[id]/page.tsx`**: Existing chat model validation  
+- **`app/(chat)/api/chat/route.ts`**: Backend model selection and validation
+- **`app/(chat)/api/chat/schema.ts`**: API request validation schema
+
+#### UI Components
+- **`components/model-selector.tsx`**: Model selection dropdown
+- **`components/chat-header.tsx`**: Model display in header
+
+### Model Resolution in Chat API
+
+```typescript
+// 1. Validate selected model against user entitlements
+const userType = session?.user?.type || 'guest';
+const { availableChatModelIds } = entitlementsByUserType[userType];
+
+// 2. Auto-select vision model for image attachments
+const resolvedModelId = hasImageAttachment
+  ? 'chat-model-vision'
+  : selectedChatModel;
+
+// 3. Use resolved model in AI provider
+const result = streamText({
+  model: myProvider.languageModel(resolvedModelId),
+  // ... other options
+});
+```
+
+## 🎯 Special Features
+
+### 1. Automatic Vision Model Selection
+When users upload images, the system automatically switches to `chat-model-vision` regardless of their selected model.
+
+### 2. Reasoning Model Limitations
+The `chat-model-reasoning` model has specific limitations:
+- No access to tools (weather, documents, etc.)
+- Optimized for pure reasoning tasks
+
+### 3. Context-Aware Model Usage
+- **Title Generation**: Always uses `title-model` (Claude 3.5 Haiku) for efficiency
+- **Document Creation**: Uses `artifact-model` (Claude 3.5 Sonnet) for structured content
+
+## 🚀 Migration Guide
+
+### Upgrading from Single Model
+
+If upgrading from a single-model setup:
+
+1. **Update Model IDs**: Change `'chat-model'` to `'chat-model1'` in:
+   - `lib/ai/models.ts` (DEFAULT_CHAT_MODEL)
+   - `lib/ai/entitlements.ts` (all user type configurations)
+   - `app/(chat)/api/chat/schema.ts` (validation schema)
+
+2. **Add Validation**: Implement cookie validation in chat pages
+3. **Update Components**: Ensure model selector uses entitlement-based filtering
+
+### Adding New Models
+
+1. **Add to Provider** (`lib/ai/providers.ts`):
+   ```typescript
+   'new-model-id': anthropic('claude-new-model'),
+   ```
+
+2. **Add to Models List** (`lib/ai/models.ts`):
+   ```typescript
+   {
+     id: 'new-model-id',
+     name: 'New Model Name', 
+     description: 'Model description',
+   }
+   ```
+
+3. **Update Entitlements** (`lib/ai/entitlements.ts`):
+   ```typescript
+   availableChatModelIds: ['existing-models', 'new-model-id'],
+   ```
+
+4. **Update API Schema** (`app/(chat)/api/chat/schema.ts`):
+   ```typescript
+   selectedChatModel: z.enum([
+     'existing-models',
+     'new-model-id',
+   ]),
+   ```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **Model Name Not Showing**: 
+   - Clear browser cookies to reset invalid model IDs
+   - Check user has access to the selected model
+
+2. **Access Denied Errors**:
+   - Verify user type is correctly set in session
+   - Check entitlements configuration matches user type
+
+3. **Default Model Issues**:
+   - Ensure `getDefaultChatModelForUser` returns valid model for user type
+   - Verify fallback logic handles edge cases
+
+### Debug Commands
+
+```bash
+# Check current model configuration
+grep -r "chat-model" lib/ai/
+
+# Verify entitlements setup  
+cat lib/ai/entitlements.ts
+
+# Test model validation
+npx tsx scripts/test-model-validation.ts
+```
+
+This multi-model system provides a robust, scalable foundation for serving different AI models to different user tiers while maintaining security and providing seamless fallback mechanisms.
