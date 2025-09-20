@@ -9,7 +9,7 @@ const filePartSchema = z.object({
   type: z.enum(['file']),
   data: z.string(), // base64 or data URL
   mediaType: z.string(), // e.g., 'image/png', 'image/jpeg'
-  url: z.string().url().optional(),
+  url: z.string().url(), // Required for FileUIPart compatibility
 });
 
 const partSchema = z.union([textPartSchema, filePartSchema]);
