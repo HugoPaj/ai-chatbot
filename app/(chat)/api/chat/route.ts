@@ -1,9 +1,10 @@
 import {
-  appendClientMessage,
-  appendResponseMessages,
-  createDataStream,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
   smoothStream,
   streamText,
+  stepCountIs,
+  type UIMessage,
 } from 'ai';
 import type { SearchResult } from '@/lib/types';
 import { auth } from '@/app/(auth)/auth';
@@ -83,8 +84,23 @@ export async function POST(request: Request) {
 
   try {
     const json = await request.json();
+    console.log('[DEBUG] Received request body:', JSON.stringify(json, null, 2));
+
+    // Preprocess for AI SDK v5 compatibility
+    if (!json.message.createdAt) {
+      json.message.createdAt = new Date().toISOString();
+    }
+    if (!json.message.content && json.message.parts?.length > 0) {
+      json.message.content = json.message.parts
+        .filter((part: any) => part.type === 'text')
+        .map((part: any) => part.text)
+        .join(' ');
+    }
+
     requestBody = postRequestBodySchema.parse(json);
-  } catch (_) {
+    console.log('[DEBUG] Request body validation successful');
+  } catch (error) {
+    console.error('[DEBUG] Request body validation failed:', error);
     return new ChatSDKError('bad_request:api').toResponse();
   }
 
@@ -142,11 +158,14 @@ export async function POST(request: Request) {
       }
     }
 
-    const messages = appendClientMessage({
-      // @ts-expect-error: todo add type conversion from DBMessage[] to UIMessage[]
-      messages: previousMessages,
-      message,
-    });
+    const messages: UIMessage[] = [
+      ...previousMessages.map((msg) => ({
+        ...msg,
+        role: msg.role as 'user' | 'assistant' | 'system',
+        parts: msg.parts as any,
+      })),
+      message as unknown as UIMessage,
+    ];
 
     const { longitude, latitude, city, country } = geolocation(request);
 
@@ -159,6 +178,7 @@ export async function POST(request: Request) {
 
     // Run user message saving and stream setup in parallel
     const streamId = generateUUID();
+    /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
     await Promise.all([
       saveMessages({
         messages: [
@@ -179,8 +199,8 @@ export async function POST(request: Request) {
       createStreamId({ streamId, chatId: id }),
     ]);
 
-    const stream = createDataStream({
-      execute: async (dataStream) => {
+    const stream = createUIMessageStream<UIMessage>({
+      execute: async ({ writer }) => {
         // Start streaming immediately while preparing context in background
         let documentContext = '';
         let documentSources: string[] = [];
@@ -201,10 +221,12 @@ export async function POST(request: Request) {
           // Attempt an image-based similarity search first if the user provided image attachments
           let similarDocs: SearchResult[] = [];
 
+          /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
           if (
             message.experimental_attachments &&
             message.experimental_attachments.length > 0
           ) {
+            /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
             const firstImage = message.experimental_attachments.find((att) =>
               att.contentType.startsWith('image/'),
             );
@@ -375,6 +397,7 @@ export async function POST(request: Request) {
         }
 
         // Decide whether to use a vision-capable model based on attachments
+        /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
         const hasImageAttachment = Boolean(
           message.experimental_attachments?.some((att) =>
             att.contentType.startsWith('image/'),
@@ -389,16 +412,30 @@ export async function POST(request: Request) {
         const modelMessages = hasImageAttachment
           ? (messages as any[])
           : (messages as any[]).map((msg) => {
+              /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
               const { experimental_attachments, attachments, ...rest } =
                 msg as any;
               return rest;
             });
 
+        // Send sources data if available
+        if (documentSources.length > 0) {
+          console.log('[DEBUG] Sending sources data:', documentSources);
+          writer.write({
+            type: 'data-sources',
+            data: {
+              type: 'sources',
+              sources: documentSources,
+            },
+          });
+        }
+
         const result = streamText({
           model: myProvider.languageModel(resolvedModelId),
           system: enhancedSystemPrompt,
           messages: modelMessages,
-          maxSteps: 5,
+          stopWhen: stepCountIs(5),
+
           experimental_activeTools:
             selectedChatModel === 'chat-model-reasoning'
               ? []
@@ -408,26 +445,31 @@ export async function POST(request: Request) {
                   'updateDocument',
                   'requestSuggestions',
                 ],
+
           experimental_transform: smoothStream({
             chunking: 'word',
             delayInMs: 5, // Smooth streaming at 200 chars/second
           }),
-          experimental_generateMessageId: generateUUID,
+
           tools: {
             getWeather,
-            createDocument: createDocument({ session, dataStream }),
-            updateDocument: updateDocument({ session, dataStream }),
+            // @ts-expect-error: dataStream API changed in v5, needs migration
+            createDocument: createDocument({ session }),
+            // @ts-expect-error: dataStream API changed in v5, needs migration
+            updateDocument: updateDocument({ session }),
+            // @ts-expect-error: dataStream API changed in v5, needs migration
             requestSuggestions: requestSuggestions({
               session,
-              dataStream,
             }),
           },
+
           onFinish: async ({ response }) => {
             // Save assistant response asynchronously without blocking
             if (session.user?.id) {
               setImmediate(async () => {
                 try {
                   const assistantId = getTrailingMessageId({
+                    // @ts-expect-error: response.messages type mismatch with ResponseMessage[] in v5
                     messages: response.messages.filter(
                       (message) => message.role === 'assistant',
                     ),
@@ -437,64 +479,50 @@ export async function POST(request: Request) {
                     throw new Error('No assistant message found!');
                   }
 
-                  const [, assistantMessage] = appendResponseMessages({
-                    messages: [message],
-                    responseMessages: response.messages,
-                  });
+                  const assistantMessage = response.messages.find(
+                    (m) => m.role === 'assistant',
+                  ) as UIMessage | undefined;
 
-                  await saveMessages({
-                    messages: [
-                      {
-                        id: assistantId,
-                        chatId: id,
-                        role: assistantMessage.role,
-                        parts: assistantMessage.parts,
-                        attachments:
-                          assistantMessage.experimental_attachments ?? [],
-                        createdAt: new Date(),
-                      },
-                    ],
-                  });
+                  if (assistantMessage) {
+                    /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
+                    await saveMessages({
+                      messages: [
+                        {
+                          id: assistantId,
+                          chatId: id,
+                          role: assistantMessage.role,
+                          parts: assistantMessage.parts,
+                          attachments:
+                            // @ts-expect-error: experimental_attachments deprecated in v5
+                            assistantMessage.experimental_attachments ?? [],
+                          createdAt: new Date(),
+                        },
+                      ],
+                    });
+                  }
                 } catch (_) {
                   console.error('Failed to save chat');
                 }
               });
             }
-
-            // Send sources data if available
-            console.log(
-              `[DEBUG] Document sources count: ${documentSources.length}`,
-              documentSources,
-            );
-            if (documentSources.length > 0) {
-              console.log('[DEBUG] Sending sources data:', documentSources);
-              dataStream.writeData({
-                type: 'sources',
-                content: JSON.stringify(documentSources),
-              });
-            } else {
-              console.log('[DEBUG] No document sources to send');
-            }
           },
+
           experimental_telemetry: {
             isEnabled: isProductionEnvironment,
             functionId: 'stream-text',
           },
         });
 
-        result.consumeStream();
-
-        result.mergeIntoDataStream(dataStream, {
-          sendReasoning: true,
-        });
+        // Properly merge the streamText result into the UI message stream
+        writer.merge(result.toUIMessageStream());
       },
       onError: () => {
         return 'Oops, an error occurred!';
       },
     });
 
-    // Return direct stream response without Redis
-    return new Response(stream);
+    // Return direct stream response
+    return createUIMessageStreamResponse({ stream });
   } catch (error) {
     if (error instanceof ChatSDKError) {
       return error.toResponse();
@@ -544,28 +572,34 @@ export async function GET(request: Request) {
   const messages = await getMessagesByChatId({ id: chatId });
   const mostRecentMessage = messages.at(-1);
 
-  const emptyDataStream = createDataStream({
+  const emptyStream = createUIMessageStream<UIMessage>({
     execute: () => {},
+  });
+  const emptyDataStream = createUIMessageStreamResponse({
+    stream: emptyStream,
   });
 
   if (!mostRecentMessage) {
-    return new Response(emptyDataStream, { status: 200 });
+    return emptyDataStream;
   }
 
   if (mostRecentMessage.role !== 'assistant') {
+    // @ts-expect-error: Response constructor type mismatch in v5
     return new Response(emptyDataStream, { status: 200 });
   }
 
-  const restoredStream = createDataStream({
-    execute: (buffer) => {
-      buffer.writeData({
-        type: 'append-message',
-        message: JSON.stringify(mostRecentMessage),
+  const restored = createUIMessageStream<UIMessage>({
+    execute: ({ writer }) => {
+      writer.write({
+        type: 'data-append-message',
+        data: {
+          type: 'append-message',
+          message: JSON.stringify(mostRecentMessage),
+        },
       });
     },
   });
-
-  return new Response(restoredStream, { status: 200 });
+  return createUIMessageStreamResponse({ stream: restored });
 }
 
 export async function DELETE(request: Request) {

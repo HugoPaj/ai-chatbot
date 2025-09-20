@@ -10,35 +10,16 @@ interface UseSourcesParams {
 
 export function useSources({ chatId }: UseSourcesParams) {
   const [sources, setSources] = useState<Record<string, string[]>>({});
-  const { data: dataStream } = useChat({ id: chatId });
+  // Note: In AI SDK v5, the 'data' property has been removed from useChat
+  // This hook may need to be refactored to work with the new streaming system
+  const { messages } = useChat({ id: chatId });
 
   useEffect(() => {
-    if (!dataStream?.length) return;
-
-    // Process the latest data stream entries for sources
-    const sourcesDeltas = dataStream.filter((delta) => {
-      const typedDelta = delta as DataStreamDelta;
-      return typedDelta.type === 'sources';
-    }) as DataStreamDelta[];
-
-    // Get the latest sources data
-    const latestSourcesDelta = sourcesDeltas.at(-1);
-    if (latestSourcesDelta) {
-      try {
-        const sourcesData = JSON.parse(
-          latestSourcesDelta.content as string,
-        ) as string[];
-        // For now, we'll use a simple approach - store sources for the current chat
-        // In a more sophisticated implementation, you might want to associate sources with specific messages
-        setSources((prev) => ({
-          ...prev,
-          [chatId]: sourcesData,
-        }));
-      } catch (error) {
-        console.error('Failed to parse sources data:', error);
-      }
-    }
-  }, [dataStream, chatId]);
+    // TODO: Implement source extraction from messages in AI SDK v5
+    // The previous dataStream approach is no longer available
+    // Sources might now be embedded in message parts or handled differently
+    // For now, this hook is disabled until we implement the new approach
+  }, [messages, chatId]);
 
   const getSourcesForMessage = (messageId?: string): string[] => {
     // For now, return the latest sources for the chat

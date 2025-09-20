@@ -1,9 +1,9 @@
-import type { CoreMessage, LanguageModelV1StreamPart } from 'ai';
+import type { ModelMessage } from 'ai';
 import { TEST_PROMPTS } from './basic';
 
 export function compareMessages(
-  firstMessage: CoreMessage,
-  secondMessage: CoreMessage,
+  firstMessage: ModelMessage,
+  secondMessage: ModelMessage,
 ): boolean {
   if (firstMessage.role !== secondMessage.role) return false;
 
@@ -39,26 +39,34 @@ export function compareMessages(
   return true;
 }
 
-const textToDeltas = (text: string): LanguageModelV1StreamPart[] => {
+const textToDeltas = (text: string) => {
   const deltas = text
     .split(' ')
-    .map((char) => ({ type: 'text-delta' as const, textDelta: `${char} ` }));
+    .map((char, index) => ({
+      type: 'text-delta' as const,
+      id: `chunk-${index}`,
+      delta: `${char} `,
+    }));
 
   return deltas;
 };
 
-const reasoningToDeltas = (text: string): LanguageModelV1StreamPart[] => {
+const reasoningToDeltas = (text: string) => {
   const deltas = text
     .split(' ')
-    .map((char) => ({ type: 'reasoning' as const, textDelta: `${char} ` }));
+    .map((char, index) => ({
+      type: 'reasoning' as const,
+      id: `reasoning-${index}`,
+      delta: `${char} `,
+    }));
 
   return deltas;
 };
 
 export const getResponseChunksByPrompt = (
-  prompt: CoreMessage[],
+  prompt: ModelMessage[],
   isReasoningEnabled = false,
-): Array<LanguageModelV1StreamPart> => {
+) => {
   const recentMessage = prompt.at(-1);
 
   if (!recentMessage) {
@@ -74,7 +82,7 @@ export const getResponseChunksByPrompt = (
           type: 'finish',
           finishReason: 'stop',
           logprobs: undefined,
-          usage: { completionTokens: 10, promptTokens: 3 },
+          usage: { outputTokens: 10, inputTokens: 3, totalTokens: 13 },
         },
       ];
     } else if (compareMessages(recentMessage, TEST_PROMPTS.USER_GRASS)) {
@@ -87,7 +95,7 @@ export const getResponseChunksByPrompt = (
           type: 'finish',
           finishReason: 'stop',
           logprobs: undefined,
-          usage: { completionTokens: 10, promptTokens: 3 },
+          usage: { outputTokens: 10, inputTokens: 3, totalTokens: 13 },
         },
       ];
     }
@@ -100,7 +108,7 @@ export const getResponseChunksByPrompt = (
         type: 'finish',
         finishReason: 'stop',
         logprobs: undefined,
-        usage: { completionTokens: 10, promptTokens: 3 },
+        usage: { outputTokens: 10, inputTokens: 3 },
       },
     ];
   } else if (compareMessages(recentMessage, TEST_PROMPTS.USER_GRASS)) {
@@ -110,7 +118,7 @@ export const getResponseChunksByPrompt = (
         type: 'finish',
         finishReason: 'stop',
         logprobs: undefined,
-        usage: { completionTokens: 10, promptTokens: 3 },
+        usage: { outputTokens: 10, inputTokens: 3 },
       },
     ];
   } else if (compareMessages(recentMessage, TEST_PROMPTS.USER_SKY)) {
@@ -120,7 +128,7 @@ export const getResponseChunksByPrompt = (
         type: 'finish',
         finishReason: 'stop',
         logprobs: undefined,
-        usage: { completionTokens: 10, promptTokens: 3 },
+        usage: { outputTokens: 10, inputTokens: 3 },
       },
     ];
   } else if (compareMessages(recentMessage, TEST_PROMPTS.USER_NEXTJS)) {
@@ -131,7 +139,7 @@ export const getResponseChunksByPrompt = (
         type: 'finish',
         finishReason: 'stop',
         logprobs: undefined,
-        usage: { completionTokens: 10, promptTokens: 3 },
+        usage: { outputTokens: 10, inputTokens: 3 },
       },
     ];
   } else if (
@@ -143,7 +151,7 @@ export const getResponseChunksByPrompt = (
         type: 'finish',
         finishReason: 'stop',
         logprobs: undefined,
-        usage: { completionTokens: 10, promptTokens: 3 },
+        usage: { outputTokens: 10, inputTokens: 3 },
       },
     ];
   } else if (compareMessages(recentMessage, TEST_PROMPTS.USER_TEXT_ARTIFACT)) {
@@ -162,7 +170,7 @@ export const getResponseChunksByPrompt = (
         type: 'finish',
         finishReason: 'stop',
         logprobs: undefined,
-        usage: { completionTokens: 10, promptTokens: 3 },
+        usage: { outputTokens: 10, inputTokens: 3 },
       },
     ];
   } else if (
@@ -192,7 +200,7 @@ As we move forward, Silicon Valley continues to reinvent itself. While some pred
         type: 'finish',
         finishReason: 'stop',
         logprobs: undefined,
-        usage: { completionTokens: 10, promptTokens: 3 },
+        usage: { outputTokens: 10, inputTokens: 3 },
       },
     ];
   } else if (
@@ -201,13 +209,14 @@ As we move forward, Silicon Valley continues to reinvent itself. While some pred
     return [
       {
         type: 'text-delta',
-        textDelta: 'A document was created and is now visible to the user.',
+        id: 'create-doc-result',
+        delta: 'A document was created and is now visible to the user.',
       },
       {
         type: 'finish',
         finishReason: 'tool-calls',
         logprobs: undefined,
-        usage: { completionTokens: 10, promptTokens: 3 },
+        usage: { outputTokens: 10, inputTokens: 3 },
       },
     ];
   } else if (compareMessages(recentMessage, TEST_PROMPTS.GET_WEATHER_CALL)) {
@@ -223,7 +232,7 @@ As we move forward, Silicon Valley continues to reinvent itself. While some pred
         type: 'finish',
         finishReason: 'stop',
         logprobs: undefined,
-        usage: { completionTokens: 10, promptTokens: 3 },
+        usage: { outputTokens: 10, inputTokens: 3 },
       },
     ];
   } else if (compareMessages(recentMessage, TEST_PROMPTS.GET_WEATHER_RESULT)) {
@@ -233,10 +242,10 @@ As we move forward, Silicon Valley continues to reinvent itself. While some pred
         type: 'finish',
         finishReason: 'stop',
         logprobs: undefined,
-        usage: { completionTokens: 10, promptTokens: 3 },
+        usage: { outputTokens: 10, inputTokens: 3 },
       },
     ];
   }
 
-  return [{ type: 'text-delta', textDelta: 'Unknown test prompt!' }];
+  return [{ type: 'text-delta', id: 'unknown', delta: 'Unknown test prompt!' }];
 };

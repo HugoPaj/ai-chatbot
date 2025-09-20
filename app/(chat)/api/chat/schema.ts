@@ -1,9 +1,18 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 const textPartSchema = z.object({
   text: z.string().min(1).max(2000),
   type: z.enum(['text']),
 });
+
+const filePartSchema = z.object({
+  type: z.enum(['file']),
+  data: z.string(), // base64 or data URL
+  mediaType: z.string(), // e.g., 'image/png', 'image/jpeg'
+  url: z.string().url().optional(),
+});
+
+const partSchema = z.union([textPartSchema, filePartSchema]);
 
 export const postRequestBodySchema = z.object({
   id: z.string().uuid(),
@@ -12,7 +21,8 @@ export const postRequestBodySchema = z.object({
     createdAt: z.coerce.date(),
     role: z.enum(['user']),
     content: z.string().min(1).max(2000),
-    parts: z.array(textPartSchema),
+    parts: z.array(partSchema),
+    // Keep experimental_attachments for backward compatibility
     experimental_attachments: z
       .array(
         z.object({

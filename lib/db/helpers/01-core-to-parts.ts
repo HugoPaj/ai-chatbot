@@ -10,7 +10,8 @@ import {
 } from '../schema';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { inArray } from 'drizzle-orm';
-import { appendResponseMessages, type UIMessage } from 'ai';
+import { type UIMessage } from 'ai';
+// Note: appendResponseMessages has been removed in AI SDK v5
 
 config({
   path: '.env.local',
@@ -88,7 +89,7 @@ function sanitizeParts<T extends { type: string; [k: string]: any }>(
   parts: T[],
 ): T[] {
   return parts.filter(
-    (part) => !(part.type === 'reasoning' && part.reasoning === 'undefined'),
+    (part) => !(part.type === 'reasoning' && part.reasoningText === 'undefined'),
   );
 }
 
@@ -155,14 +156,9 @@ async function migrateMessages() {
         const [firstAssistantMessage] = assistantMessages;
 
         try {
-          const uiSection = appendResponseMessages({
-            messages: [userMessage],
-            // @ts-expect-error: message.content has different type
-            responseMessages: assistantMessages,
-            _internal: {
-              currentDate: () => firstAssistantMessage.createdAt ?? new Date(),
-            },
-          });
+          /* FIXME(@ai-sdk-upgrade-v5): The `appendResponseMessages` option has been removed. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#message-persistence-changes */
+          // This migration script may need to be rewritten for AI SDK v5 or may no longer be needed
+          const uiSection = [userMessage, ...assistantMessages] as UIMessage[];
 
           const projectedUISection = uiSection
             .map((message) => {
@@ -170,9 +166,9 @@ async function migrateMessages() {
                 return {
                   id: message.id,
                   chatId: chat.id,
-                  parts: [{ type: 'text', text: message.content }],
+                  parts: [{ type: 'text', text: (message as any).content || '' }],
                   role: message.role,
-                  createdAt: message.createdAt,
+                  createdAt: (message as any).createdAt || new Date(),
                   attachments: [],
                 } as NewMessageInsert;
               } else if (message.role === 'assistant') {
@@ -185,7 +181,7 @@ async function migrateMessages() {
                   chatId: chat.id,
                   parts: cleanParts,
                   role: message.role,
-                  createdAt: message.createdAt,
+                  createdAt: (message as any).createdAt || new Date(),
                   attachments: [],
                 } as NewMessageInsert;
               }

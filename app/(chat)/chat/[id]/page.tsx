@@ -7,7 +7,8 @@ import { getChatById, getMessagesByChatId } from '@/lib/db/queries';
 import { DataStreamHandler } from '@/components/data-stream-handler';
 import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 import type { DBMessage } from '@/lib/db/schema';
-import type { Attachment, UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
+import type { Attachment } from '@/lib/types';
 
 export default async function Page(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -39,6 +40,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
   });
 
   function convertToUIMessages(messages: Array<DBMessage>): Array<UIMessage> {
+    /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
     return messages.map((message) => ({
       id: message.id,
       parts: message.parts as UIMessage['parts'],

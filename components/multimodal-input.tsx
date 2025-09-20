@@ -1,6 +1,7 @@
 'use client';
 
-import type { Attachment, UIMessage } from 'ai';
+import type { UIMessage, ChatStatus } from 'ai';
+import type { Attachment } from '@/lib/types';
 import cx from 'classnames';
 import type React from 'react';
 import {
@@ -22,7 +23,6 @@ import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { SuggestedActions } from './suggested-actions';
 import equal from 'fast-deep-equal';
-import type { UseChatHelpers } from '@ai-sdk/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
@@ -40,21 +40,23 @@ function PureMultimodalInput({
   messages,
   setMessages,
   append,
-  handleSubmit,
+  onSubmit,
   className,
   selectedVisibilityType,
 }: {
   chatId: string;
-  input: UseChatHelpers['input'];
-  setInput: UseChatHelpers['setInput'];
-  status: UseChatHelpers['status'];
+  input: string;
+  setInput: Dispatch<SetStateAction<string>>;
+  status: ChatStatus;
   stop: () => void;
   attachments: Array<Attachment>;
   setAttachments: Dispatch<SetStateAction<Array<Attachment>>>;
   messages: Array<UIMessage>;
-  setMessages: UseChatHelpers['setMessages'];
-  append: UseChatHelpers['append'];
-  handleSubmit: UseChatHelpers['handleSubmit'];
+  setMessages: (
+    messages: UIMessage[] | ((messages: UIMessage[]) => UIMessage[]),
+  ) => void;
+  append: (message: { role: 'user'; content: string }) => void;
+  onSubmit: (params: { attachments: Array<Attachment> }) => void;
   className?: string;
   selectedVisibilityType: VisibilityType;
 }) {
@@ -117,9 +119,7 @@ function PureMultimodalInput({
     // Start performance monitoring
     startRequest(chatId);
 
-    handleSubmit(undefined, {
-      experimental_attachments: attachments,
-    });
+    onSubmit({ attachments });
 
     setAttachments([]);
     setLocalStorageInput('');
@@ -130,12 +130,12 @@ function PureMultimodalInput({
     }
   }, [
     attachments,
-    handleSubmit,
     setAttachments,
     setLocalStorageInput,
     width,
     chatId,
     startRequest,
+    onSubmit,
   ]);
 
   const uploadFile = async (file: File) => {
@@ -345,7 +345,7 @@ function PureAttachmentsButton({
   status,
 }: {
   fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
-  status: UseChatHelpers['status'];
+  status: ChatStatus;
 }) {
   return (
     <Button
@@ -370,7 +370,9 @@ function PureStopButton({
   setMessages,
 }: {
   stop: () => void;
-  setMessages: UseChatHelpers['setMessages'];
+  setMessages: (
+    messages: UIMessage[] | ((messages: UIMessage[]) => UIMessage[]),
+  ) => void;
 }) {
   return (
     <Button
@@ -379,7 +381,7 @@ function PureStopButton({
       onClick={(event) => {
         event.preventDefault();
         stop();
-        setMessages((messages) => messages);
+        setMessages((messages: UIMessage[]) => messages);
       }}
     >
       <StopIcon size={14} />

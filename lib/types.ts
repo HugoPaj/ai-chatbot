@@ -60,3 +60,10 @@ export interface ChatResponse {
   response: string;
   sources: string[];
 }
+
+// Local UI attachment type (AI SDK v5 removed Attachment export)
+export interface Attachment {
+  url: string;
+  name: string;
+  contentType: string;
+}

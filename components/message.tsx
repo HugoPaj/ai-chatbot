@@ -5,6 +5,7 @@ import cx from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';
 import { memo, useState } from 'react';
 import type { Vote } from '@/lib/db/schema';
+import type { Attachment } from '@/lib/types';
 import { DocumentToolCall, DocumentToolResult } from './document';
 import { PencilEditIcon, SparklesIcon } from './icons';
 import { Markdown } from './markdown';
@@ -20,7 +21,6 @@ import { DocumentPreview } from './document-preview';
 import { MessageReasoning } from './message-reasoning';
 import { SourcesDisplay } from './sources-display';
 import { useSources } from '@/hooks/use-sources';
-import type { UseChatHelpers } from '@ai-sdk/react';
 
 const PurePreviewMessage = ({
   chatId,
@@ -36,14 +36,17 @@ const PurePreviewMessage = ({
   message: UIMessage;
   vote: Vote | undefined;
   isLoading: boolean;
-  setMessages: UseChatHelpers['setMessages'];
-  reload: UseChatHelpers['reload'];
+  setMessages: (
+    messages: UIMessage[] | ((messages: UIMessage[]) => UIMessage[]),
+  ) => void;
+  reload: () => void;
   isReadonly: boolean;
   requiresScrollPadding: boolean;
 }) => {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const { sources } = useSources({ chatId });
 
+  /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
   return (
     <AnimatePresence>
       <motion.div
@@ -75,13 +78,13 @@ const PurePreviewMessage = ({
               'min-h-96': message.role === 'assistant' && requiresScrollPadding,
             })}
           >
-            {message.experimental_attachments &&
-              message.experimental_attachments.length > 0 && (
+            {(message as any).experimental_attachments &&
+              (message as any).experimental_attachments.length > 0 && (
                 <div
                   data-testid={`message-attachments`}
                   className="flex flex-row justify-end gap-2"
                 >
-                  {message.experimental_attachments.map((attachment) => (
+                  {(message as any).experimental_attachments.map((attachment: Attachment) => (
                     <PreviewAttachment
                       key={attachment.url}
                       attachment={attachment}
@@ -99,7 +102,7 @@ const PurePreviewMessage = ({
                   <MessageReasoning
                     key={key}
                     isLoading={isLoading}
-                    reasoning={part.reasoning}
+                    reasoningText={(part as any).text}
                   />
                 );
               }
@@ -157,11 +160,11 @@ const PurePreviewMessage = ({
               }
 
               if (type === 'tool-invocation') {
-                const { toolInvocation } = part;
-                const { toolName, toolCallId, state } = toolInvocation;
+                const partWithToolData = part as any;
+                const { toolName, toolCallId, state } = partWithToolData;
 
                 if (state === 'call') {
-                  const { args } = toolInvocation;
+                  const { args } = partWithToolData;
 
                   return (
                     <div
@@ -192,7 +195,7 @@ const PurePreviewMessage = ({
                 }
 
                 if (state === 'result') {
-                  const { result } = toolInvocation;
+                  const { result } = partWithToolData;
 
                   return (
                     <div key={toolCallId}>

@@ -1,4 +1,5 @@
-import type { Attachment, UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
+import type { Attachment } from '@/lib/types';
 import { formatDistance } from 'date-fns';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -26,7 +27,6 @@ import { codeArtifact } from '@/artifacts/code/client';
 import { sheetArtifact } from '@/artifacts/sheet/client';
 import { textArtifact } from '@/artifacts/text/client';
 import equal from 'fast-deep-equal';
-import type { UseChatHelpers } from '@ai-sdk/react';
 import type { VisibilityType } from './visibility-selector';
 
 export const artifactDefinitions = [
@@ -71,17 +71,19 @@ function PureArtifact({
 }: {
   chatId: string;
   input: string;
-  setInput: UseChatHelpers['setInput'];
-  status: UseChatHelpers['status'];
-  stop: UseChatHelpers['stop'];
+  setInput: React.Dispatch<React.SetStateAction<string>>;
+  status: 'submitted' | 'streaming' | 'ready' | 'error';
+  stop: () => Promise<void>;
   attachments: Array<Attachment>;
   setAttachments: Dispatch<SetStateAction<Array<Attachment>>>;
   messages: Array<UIMessage>;
-  setMessages: UseChatHelpers['setMessages'];
+  setMessages: (
+    messages: UIMessage[] | ((messages: UIMessage[]) => UIMessage[]),
+  ) => void;
   votes: Array<Vote> | undefined;
-  append: UseChatHelpers['append'];
-  handleSubmit: UseChatHelpers['handleSubmit'];
-  reload: UseChatHelpers['reload'];
+  append: (m: { role: 'user'; content: string }) => void;
+  handleSubmit: () => void;
+  reload: () => void;
   isReadonly: boolean;
   selectedVisibilityType: VisibilityType;
 }) {
@@ -329,7 +331,7 @@ function PureArtifact({
                     chatId={chatId}
                     input={input}
                     setInput={setInput}
-                    handleSubmit={handleSubmit}
+                    onSubmit={() => handleSubmit()}
                     status={status}
                     stop={stop}
                     attachments={attachments}

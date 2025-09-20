@@ -1,6 +1,6 @@
 import { generateUUID } from '@/lib/utils';
-import { type DataStreamWriter, tool } from 'ai';
-import { z } from 'zod';
+import { tool } from 'ai';
+import { z } from 'zod/v3';
 import type { Session } from 'next-auth';
 import {
   artifactKinds,
@@ -9,38 +9,56 @@ import {
 
 interface CreateDocumentProps {
   session: Session;
-  dataStream: DataStreamWriter;
+  // Note: DataStreamWriter has been replaced in AI SDK v5
+  // This will need to be updated to use the new writer interface
+  dataStream: any;
 }
 
 export const createDocument = ({ session, dataStream }: CreateDocumentProps) =>
   tool({
     description:
       'Create a document for a writing or content creation activities. This tool will call other functions that will generate the contents of the document based on the title and kind.',
-    parameters: z.object({
+    inputSchema: z.object({
       title: z.string(),
       kind: z.enum(artifactKinds),
     }),
     execute: async ({ title, kind }) => {
       const id = generateUUID();
 
-      dataStream.writeData({
-        type: 'kind',
-        content: kind,
+      dataStream.write({
+        'type': 'data',
+
+        'value': [{
+          type: 'kind',
+          content: kind,
+        }]
       });
 
-      dataStream.writeData({
-        type: 'id',
-        content: id,
+      dataStream.write({
+        'type': 'data',
+
+        'value': [{
+          type: 'id',
+          content: id,
+        }]
       });
 
-      dataStream.writeData({
-        type: 'title',
-        content: title,
+      dataStream.write({
+        'type': 'data',
+
+        'value': [{
+          type: 'title',
+          content: title,
+        }]
       });
 
-      dataStream.writeData({
-        type: 'clear',
-        content: '',
+      dataStream.write({
+        'type': 'data',
+
+        'value': [{
+          type: 'clear',
+          content: '',
+        }]
       });
 
       const documentHandler = documentHandlersByArtifactKind.find(
@@ -59,7 +77,10 @@ export const createDocument = ({ session, dataStream }: CreateDocumentProps) =>
         session,
       });
 
-      dataStream.writeData({ type: 'finish', content: '' });
+      dataStream.write({
+        'type': 'data',
+        'value': [{ type: 'finish', content: '' }]
+      });
 
       return {
         id,

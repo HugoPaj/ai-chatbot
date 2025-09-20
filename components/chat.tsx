@@ -1,8 +1,9 @@
 'use client';
 
-import type { Attachment, UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
+import type { Attachment } from '@/lib/types';
 import { useChat } from '@ai-sdk/react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { ChatHeader } from '@/components/chat-header';
 import type { Vote } from '@/lib/db/schema';
@@ -46,53 +47,57 @@ export function Chat({
     initialVisibilityType,
   });
 
-  const { startRequest, recordFirstToken, recordStreamComplete, logMetrics } = usePerformanceMonitor();
+  const { startRequest, recordFirstToken, recordStreamComplete, logMetrics } =
+    usePerformanceMonitor();
 
-  const {
-    messages,
-    setMessages,
-    handleSubmit,
-    input,
-    setInput,
-    append,
-    status,
-    stop,
-    reload,
-    experimental_resume,
-    data,
-  } = useChat({
-    id,
-    initialMessages,
-    experimental_throttle: 16, // ~60fps for smoother streaming
-    sendExtraMessageFields: true,
-    generateId: generateUUID,
-    fetch: fetchWithErrorHandlers,
-    experimental_prepareRequestBody: (body) => ({
+  const { messages, setMessages, status, stop, sendMessage, regenerate } =
+    useChat({
       id,
-      message: body.messages.at(-1),
-      selectedChatModel: initialChatModel,
-      selectedVisibilityType: visibilityType,
-    }),
-    onFinish: () => {
-      // Record performance metrics
-      recordStreamComplete(id);
-      logMetrics(id);
+      experimental_throttle: 16,
+      generateId: generateUUID,
+      // Dynamically import to avoid ESM type issues
+      transport: new (require('ai').DefaultChatTransport)({
+        api: '/api/chat',
+        fetch: fetchWithErrorHandlers,
+        prepareSendMessagesRequest: ({
+          id: chatId,
+          messages: msgs,
+        }: { id: string; messages: UIMessage[] }) => ({
+          api: '/api/chat',
+          body: {
+            id: chatId,
+            message: msgs.at(-1),
+            selectedChatModel: initialChatModel,
+            selectedVisibilityType: visibilityType,
+          },
+        }),
+      }),
+      onFinish: () => {
+        recordStreamComplete(id);
+        logMetrics(id);
+        setTimeout(() => {
+          mutate(unstable_serialize(getChatHistoryPaginationKey));
+        }, 0);
+      },
+      onError: (error) => {
+        if (error instanceof ChatSDKError) {
+          toast({ type: 'error', description: error.message });
+        }
+      },
+    });
 
-      // Use setTimeout to avoid blocking the UI update
-      setTimeout(() => {
-        mutate(unstable_serialize(getChatHistoryPaginationKey));
-      }, 0);
+  const [input, setInput] = useState('');
+  const append = useCallback(
+    (m: { role: 'user'; content: string }) => {
+      setInput('');
+      void sendMessage({ text: m.content });
     },
-    onError: (error) => {
-      if (error instanceof ChatSDKError) {
-        toast({
-          type: 'error',
-          description: error.message,
-        });
-      }
-    },
-  });
-
+    [sendMessage],
+  );
+  const handleSubmit = () => {
+    if (!input.trim()) return;
+    append({ role: 'user', content: input });
+  };
 
   const searchParams = useSearchParams();
   const query = searchParams.get('query');
@@ -122,8 +127,7 @@ export function Chat({
   useAutoResume({
     autoResume,
     initialMessages,
-    experimental_resume,
-    data,
+    resumeStream: () => regenerate(),
     setMessages,
   });
 
@@ -144,7 +148,7 @@ export function Chat({
           votes={votes}
           messages={messages}
           setMessages={setMessages}
-          reload={reload}
+          reload={() => regenerate()}
           isReadonly={isReadonly}
           isArtifactVisible={isArtifactVisible}
         />
@@ -155,7 +159,6 @@ export function Chat({
               chatId={id}
               input={input}
               setInput={setInput}
-              handleSubmit={handleSubmit}
               status={status}
               stop={stop}
               attachments={attachments}
@@ -163,6 +166,7 @@ export function Chat({
               messages={messages}
               setMessages={setMessages}
               append={append}
+              onSubmit={() => handleSubmit()}
               selectedVisibilityType={visibilityType}
             />
           )}
@@ -181,7 +185,7 @@ export function Chat({
         append={append}
         messages={messages}
         setMessages={setMessages}
-        reload={reload}
+        reload={() => regenerate()}
         votes={votes}
         isReadonly={isReadonly}
         selectedVisibilityType={visibilityType}
