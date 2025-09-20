@@ -166,7 +166,6 @@ export async function POST(request: Request) {
       message as unknown as UIMessage,
     ];
 
-
     const { longitude, latitude, city, country } = geolocation(request);
 
     const requestHints: RequestHints = {
@@ -186,8 +185,14 @@ export async function POST(request: Request) {
             chatId: id,
             id: message.id,
             role: 'user',
-            parts: message.parts,
-            attachments: message.experimental_attachments ?? [],
+            parts: message.parts || [
+              { type: 'text', text: (message as any).content || '' },
+            ],
+            attachments: Array.isArray(
+              (message as any).experimental_attachments,
+            )
+              ? (message as any).experimental_attachments
+              : [],
             createdAt: new Date(),
           },
         ],
@@ -463,22 +468,67 @@ export async function POST(request: Request) {
             if (session.user?.id) {
               setImmediate(async () => {
                 try {
-                  const assistantId = getTrailingMessageId({
+                  const assistantMessages = response.messages.filter(
+                    (message) => message.role === 'assistant',
+                  );
+
+                  console.log(
+                    'Assistant messages from response:',
+                    assistantMessages,
+                  );
+
+                  let assistantId = getTrailingMessageId({
                     // @ts-expect-error: response.messages type mismatch with ResponseMessage[] in v5
-                    messages: response.messages.filter(
-                      (message) => message.role === 'assistant',
-                    ),
+                    messages: assistantMessages,
                   });
 
+                  // Generate a new ID if one doesn't exist
                   if (!assistantId) {
-                    throw new Error('No assistant message found!');
+                    assistantId = generateUUID();
+                    console.log('Generated new assistant ID:', assistantId);
                   }
+
+                  console.log('Using assistant ID:', assistantId);
 
                   const assistantMessage = response.messages.find(
                     (m) => m.role === 'assistant',
                   ) as UIMessage | undefined;
 
                   if (assistantMessage) {
+                    console.log('Saving assistant message:', {
+                      id: assistantId,
+                      role: assistantMessage.role,
+                      parts: assistantMessage.parts,
+                      content: (assistantMessage as any).content,
+                    });
+
+                    // Handle AI SDK v5 content structure - content might be an array of parts
+                    let messageParts: Array<{ type: string; text: string }>;
+                    const rawContent = (assistantMessage as any).content;
+
+                    if (
+                      assistantMessage.parts &&
+                      Array.isArray(assistantMessage.parts) &&
+                      assistantMessage.parts.length > 0
+                    ) {
+                      // Use existing parts if available
+                      messageParts = assistantMessage.parts;
+                    } else if (Array.isArray(rawContent)) {
+                      // Content is an array (AI SDK v5 format) - convert to parts
+                      messageParts = rawContent.map((item: any) => ({
+                        type: item.type || 'text',
+                        text: item.text || '',
+                      }));
+                    } else if (typeof rawContent === 'string') {
+                      // Content is a string - wrap in text part
+                      messageParts = [{ type: 'text', text: rawContent }];
+                    } else {
+                      // Fallback for unknown format
+                      messageParts = [{ type: 'text', text: '' }];
+                    }
+
+                    console.log('Processed message parts:', messageParts);
+
                     /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
                     await saveMessages({
                       messages: [
@@ -486,17 +536,20 @@ export async function POST(request: Request) {
                           id: assistantId,
                           chatId: id,
                           role: assistantMessage.role,
-                          parts: assistantMessage.parts,
-                          attachments:
-                            // @ts-expect-error: experimental_attachments deprecated in v5
-                            assistantMessage.experimental_attachments ?? [],
+                          parts: messageParts,
+                          attachments: Array.isArray(
+                            (assistantMessage as any).experimental_attachments,
+                          )
+                            ? (assistantMessage as any).experimental_attachments
+                            : [],
                           createdAt: new Date(),
                         },
                       ],
                     });
+                    console.log('Assistant message saved successfully');
                   }
-                } catch (_) {
-                  console.error('Failed to save chat');
+                } catch (error) {
+                  console.error('Failed to save assistant message:', error);
                 }
               });
             }

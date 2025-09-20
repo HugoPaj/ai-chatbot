@@ -38,6 +38,7 @@ function PureMultimodalInput({
   attachments,
   setAttachments,
   messages,
+  initialMessages,
   setMessages,
   append,
   onSubmit,
@@ -52,6 +53,7 @@ function PureMultimodalInput({
   attachments: Array<Attachment>;
   setAttachments: Dispatch<SetStateAction<Array<Attachment>>>;
   messages: Array<UIMessage>;
+  initialMessages: Array<UIMessage>;
   setMessages: (
     messages: UIMessage[] | ((messages: UIMessage[]) => UIMessage[]),
   ) => void;
@@ -238,6 +240,7 @@ function PureMultimodalInput({
       </AnimatePresence>
 
       {messages.length === 0 &&
+        initialMessages.length === 0 &&
         attachments.length === 0 &&
         uploadQueue.length === 0 && (
           <SuggestedActions

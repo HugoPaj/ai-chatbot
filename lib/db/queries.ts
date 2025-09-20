@@ -220,8 +220,34 @@ export async function saveMessages({
   messages: Array<DBMessage>;
 }) {
   try {
-    return await db.insert(message).values(messages);
+    // Validate messages before insertion
+    const validatedMessages = messages.map((msg) => ({
+      ...msg,
+      parts: msg.parts || [{ type: 'text', text: '' }],
+      attachments: Array.isArray(msg.attachments) ? msg.attachments : [],
+    }));
+
+    // Check for existing messages to avoid duplicates
+    const messageIds = validatedMessages.map((msg) => msg.id);
+    const existingMessages = await db
+      .select({ id: message.id })
+      .from(message)
+      .where(inArray(message.id, messageIds));
+
+    const existingIds = new Set(existingMessages.map((msg) => msg.id));
+    const newMessages = validatedMessages.filter(
+      (msg) => !existingIds.has(msg.id),
+    );
+
+    if (newMessages.length === 0) {
+      console.log('All messages already exist in database, skipping insert');
+      return [];
+    }
+
+    // Use INSERT ... ON CONFLICT DO NOTHING for extra safety
+    return await db.insert(message).values(newMessages).onConflictDoNothing();
   } catch (error) {
+    console.error('Database error details:', error);
     throw new ChatSDKError('bad_request:database', 'Failed to save messages');
   }
 }

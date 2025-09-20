@@ -124,9 +124,16 @@ export function Chat({
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const isArtifactVisible = useArtifactSelector((state) => state.isVisible);
 
+  // Initialize messages from database on component mount
+  useEffect(() => {
+    if (initialMessages.length > 0 && messages.length === 0) {
+      setMessages(initialMessages);
+    }
+  }, [initialMessages, messages.length, setMessages]);
+
   useAutoResume({
     autoResume,
-    initialMessages,
+    initialMessages: messages, // Use current messages state instead of initialMessages
     resumeStream: () => regenerate(),
     setMessages,
   });
@@ -147,6 +154,7 @@ export function Chat({
           status={status}
           votes={votes}
           messages={messages}
+          initialMessages={initialMessages}
           setMessages={setMessages}
           reload={() => regenerate()}
           isReadonly={isReadonly}
@@ -164,6 +172,7 @@ export function Chat({
               attachments={attachments}
               setAttachments={setAttachments}
               messages={messages}
+              initialMessages={initialMessages}
               setMessages={setMessages}
               append={append}
               onSubmit={() => handleSubmit()}

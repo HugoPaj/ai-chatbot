@@ -21,14 +21,23 @@ export function useAutoResume({
   useEffect(() => {
     if (!autoResume) return;
 
+    // Wait for messages to be properly loaded
+    if (!initialMessages || initialMessages.length === 0) {
+      return;
+    }
+
     const mostRecentMessage = initialMessages.at(-1);
 
     if (mostRecentMessage?.role === 'user') {
-      // Attempt to resume a previously interrupted stream
-      void resumeStream();
+      // Add a small delay to ensure the messages state is fully initialized
+      const timeoutId = setTimeout(() => {
+        void resumeStream();
+      }, 100);
+
+      return () => clearTimeout(timeoutId);
     }
 
-    // we intentionally run this once
+    // we intentionally run this once per message array change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [autoResume, initialMessages.length]);
 }

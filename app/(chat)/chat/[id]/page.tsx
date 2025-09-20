@@ -40,18 +40,54 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
     id,
   });
 
-  function convertToUIMessages(messages: Array<DBMessage>): Array<UIMessage> {
-    /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
-    return messages.map((message) => ({
-      id: message.id,
-      parts: message.parts as UIMessage['parts'],
-      role: message.role as UIMessage['role'],
-      // Note: content will soon be deprecated in @ai-sdk/react
-      content: '',
-      createdAt: message.createdAt,
-      experimental_attachments:
-        (message.attachments as Array<Attachment>) ?? [],
-    }));
+  // Determine if auto-resume should be enabled
+  // Only enable if the last message is from user AND there's no corresponding assistant response
+  const shouldAutoResume =
+    messagesFromDb.length > 0 &&
+    messagesFromDb[messagesFromDb.length - 1]?.role === 'user';
+
+  function convertToUIMessages(messages: Array<DBMessage>): Array<any> {
+    return messages.map((message) => {
+      // Extract text content from parts array for AI SDK v5 compatibility
+      const textContent =
+        (message.parts as Array<{ type: string; text?: string }>)
+          ?.filter((part) => part.type === 'text' && part.text)
+          .map((part) => part.text || '')
+          .join('\n') || '';
+
+      // Ensure parts array has valid structure
+      const validParts =
+        (message.parts as Array<{ type: string; text?: string }>)?.map(
+          (part) => ({
+            ...part,
+            text: part.text || '', // Ensure text is always a string
+          }),
+        ) || [];
+
+      const result: any = {
+        id: message.id,
+        parts: validParts,
+        role: message.role as UIMessage['role'],
+        createdAt: message.createdAt,
+      };
+
+      // Add content for backward compatibility where needed
+      if (textContent) {
+        result.content = textContent;
+      }
+
+      // Add experimental_attachments if attachments exist (for v5 compatibility)
+      if (
+        message.attachments &&
+        Array.isArray(message.attachments) &&
+        message.attachments.length > 0
+      ) {
+        (result as any).experimental_attachments =
+          message.attachments as Array<Attachment>;
+      }
+
+      return result;
+    });
   }
 
   const cookieStore = await cookies();
@@ -82,7 +118,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
           initialVisibilityType={chat.visibility}
           isReadonly={session?.user?.id !== chat.userId}
           session={session}
-          autoResume={true}
+          autoResume={shouldAutoResume}
         />
         <DataStreamHandler id={id} />
       </>

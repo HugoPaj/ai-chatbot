@@ -12,6 +12,7 @@ interface MessagesProps {
   status: ChatStatus;
   votes: Array<Vote> | undefined;
   messages: Array<UIMessage>;
+  initialMessages: Array<UIMessage>;
   setMessages: (
     messages: UIMessage[] | ((messages: UIMessage[]) => UIMessage[]),
   ) => void;
@@ -25,6 +26,7 @@ function PureMessages({
   status,
   votes,
   messages,
+  initialMessages,
   setMessages,
   reload,
   isReadonly,
@@ -40,12 +42,18 @@ function PureMessages({
     status,
   });
 
+  // Determine if we should show greeting:
+  // - Only show if no current messages AND no initial messages from database
+  // - This prevents showing greeting during loading of existing chats
+  const shouldShowGreeting =
+    messages.length === 0 && initialMessages.length === 0;
+
   return (
     <div
       ref={messagesContainerRef}
       className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-scroll pt-4 relative"
     >
-      {messages.length === 0 && <Greeting />}
+      {shouldShowGreeting && <Greeting />}
 
       {messages.map((message, index) => (
         <PreviewMessage

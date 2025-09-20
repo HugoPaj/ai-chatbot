@@ -88,6 +88,9 @@ export function getTrailingMessageId({
   return trailingMessage.id;
 }
 
-export function sanitizeText(text: string) {
+export function sanitizeText(text: string | undefined | null): string {
+  if (typeof text !== 'string') {
+    return '';
+  }
   return text.replace('<has_function_call>', '');
 }
