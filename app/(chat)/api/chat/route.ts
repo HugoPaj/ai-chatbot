@@ -4,6 +4,7 @@ import {
   smoothStream,
   streamText,
   stepCountIs,
+  convertToModelMessages,
   type UIMessage,
 } from 'ai';
 import type { SearchResult } from '@/lib/types';
@@ -84,7 +85,6 @@ export async function POST(request: Request) {
 
   try {
     const json = await request.json();
-    console.log('[DEBUG] Received request body:', JSON.stringify(json, null, 2));
 
     // Preprocess for AI SDK v5 compatibility
     if (!json.message.createdAt) {
@@ -98,9 +98,7 @@ export async function POST(request: Request) {
     }
 
     requestBody = postRequestBodySchema.parse(json);
-    console.log('[DEBUG] Request body validation successful');
   } catch (error) {
-    console.error('[DEBUG] Request body validation failed:', error);
     return new ChatSDKError('bad_request:api').toResponse();
   }
 
@@ -166,6 +164,7 @@ export async function POST(request: Request) {
       })),
       message as unknown as UIMessage,
     ];
+
 
     const { longitude, latitude, city, country } = geolocation(request);
 
@@ -408,15 +407,8 @@ export async function POST(request: Request) {
           ? ('chat-model-vision' as const)
           : selectedChatModel;
 
-        // Only strip attachments for non-vision models
-        const modelMessages = hasImageAttachment
-          ? (messages as any[])
-          : (messages as any[]).map((msg) => {
-              /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
-              const { experimental_attachments, attachments, ...rest } =
-                msg as any;
-              return rest;
-            });
+        // Convert UIMessages to ModelMessages for AI SDK v5 compatibility
+        const modelMessages = convertToModelMessages(messages);
 
         // Send sources data if available
         if (documentSources.length > 0) {
