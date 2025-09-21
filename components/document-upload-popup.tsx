@@ -34,6 +34,16 @@ interface StoredFile {
   isDeleting?: boolean;
 }
 
+// Helper function to extract meaningful filename after the unique file identifier
+const extractMeaningfulFilename = (filename: string): string => {
+  const parts = filename.split('-');
+  if (parts.length > 4) {
+    // Join everything after the 4th dash
+    return parts.slice(4).join('-');
+  }
+  return filename; // Return original if not enough dashes
+};
+
 export function DocumentUploadPopup() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
@@ -293,7 +303,7 @@ export function DocumentUploadPopup() {
         </Button>
       </SheetTrigger>
       <SheetContent className="sm:max-w-[425px]">
-        <SheetHeader>
+        <SheetHeader className="mb-4">
           <SheetTitle>Document Knowledge Base</SheetTitle>
           <SheetDescription>
             Upload documents (PDF, JPEG, PNG) to enhance the AI&apos;s
@@ -378,7 +388,7 @@ export function DocumentUploadPopup() {
                 No documents stored yet. Upload some files to get started!
               </div>
             ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto border rounded-lg">
+              <div className="max-h-60 overflow-y-auto border rounded-lg">
                 {storedFiles.map((file) => (
                   <div
                     key={file.filename}
@@ -387,7 +397,7 @@ export function DocumentUploadPopup() {
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       <FileText className="size-4 text-muted-foreground shrink-0" />
                       <span className="text-sm truncate" title={file.filename}>
-                        {file.filename}
+                        {extractMeaningfulFilename(file.filename)}
                       </span>
                     </div>
                     <Button
@@ -440,7 +450,7 @@ export function DocumentUploadPopup() {
                     </div>
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="text-sm font-medium truncate">
-                        {status.file.name}
+                        {extractMeaningfulFilename(status.file.name)}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {Math.round(status.file.size / 1024)} KB
