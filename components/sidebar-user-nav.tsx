@@ -21,14 +21,12 @@ import {
 import { useRouter } from 'next/navigation';
 import { toast } from './toast';
 import { LoaderIcon } from './icons';
-import { guestRegex } from '@/lib/constants';
 
 export function SidebarUserNav({ user }: { user: User }) {
   const router = useRouter();
   const { data, status } = useSession();
   const { setTheme, resolvedTheme } = useTheme();
 
-  const isGuest = guestRegex.test(data?.user?.email ?? '');
 
   return (
     <SidebarMenu>
@@ -60,7 +58,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                   className="rounded-full"
                 />
                 <span data-testid="user-email" className="truncate">
-                  {isGuest ? 'Guest' : user?.email}
+                  {user?.email}
                 </span>
                 <ChevronUp className="ml-auto" />
               </SidebarMenuButton>
@@ -71,19 +69,15 @@ export function SidebarUserNav({ user }: { user: User }) {
             side="top"
             className="w-[--radix-popper-anchor-width]"
           >
-            {!isGuest && (
-              <>
-                <DropdownMenuItem
-                  data-testid="user-nav-item-dashboard"
-                  className="cursor-pointer"
-                  onSelect={() => router.push('/dashboard')}
-                >
-                  <Settings className="size-4" />
-                  Dashboard
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-              </>
-            )}
+            <DropdownMenuItem
+              data-testid="user-nav-item-dashboard"
+              className="cursor-pointer"
+              onSelect={() => router.push('/dashboard')}
+            >
+              <Settings className="size-4" />
+              Dashboard
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               data-testid="user-nav-item-theme"
               className="cursor-pointer"
@@ -109,16 +103,12 @@ export function SidebarUserNav({ user }: { user: User }) {
                     return;
                   }
 
-                  if (isGuest) {
-                    router.push('/login');
-                  } else {
-                    signOut({
-                      redirectTo: '/',
-                    });
-                  }
+                  signOut({
+                    redirectTo: '/',
+                  });
                 }}
               >
-                {isGuest ? 'Login to your account' : 'Sign out'}
+                Sign out
               </button>
             </DropdownMenuItem>
           </DropdownMenuContent>

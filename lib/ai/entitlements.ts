@@ -7,27 +7,12 @@ interface Entitlements {
 }
 
 export const entitlementsByUserType: Record<UserType, Entitlements> = {
-  /*
-   * For users without an account
-   */
-  guest: {
-    maxMessagesPerDay: 5,
-    availableChatModelIds: ['chat-model3', 'chat-model-reasoning'],
-  },
 
   /*
-   * For users with an account but no subscription
+   * For users with verified organization accounts
    */
   free: {
-    maxMessagesPerDay: 5,
-    availableChatModelIds: ['chat-model3', 'chat-model-reasoning'],
-  },
-
-  /*
-   * For users with a paid subscription
-   */
-  premium: {
-    maxMessagesPerDay: -1, // Unlimited
+    maxMessagesPerDay: -1, // Unlimited for org users
     availableChatModelIds: [
       'chat-model1',
       'chat-model2',
@@ -38,6 +23,7 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
       'chat-model-reasoning',
     ],
   },
+
 
   /*
    * For admin users - unlimited access

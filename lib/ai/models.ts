@@ -11,11 +11,8 @@ export function getDefaultChatModelForUser(
   // Get available models for this user type
   const userEntitlements = entitlementsByUserType[userType];
   if (!userEntitlements || !userEntitlements.availableChatModelIds?.length) {
-    // Fallback to guest model if user type not found
-    return (
-      entitlementsByUserType.guest?.availableChatModelIds?.[0] ||
-      DEFAULT_CHAT_MODEL
-    );
+    // Fallback to default model if user type not found
+    return DEFAULT_CHAT_MODEL;
   }
 
   // Return the first available model for this user type

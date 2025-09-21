@@ -1,13 +1,13 @@
 import { compare } from 'bcrypt-ts';
 import NextAuth, { type DefaultSession } from 'next-auth';
 import type { Provider } from 'next-auth/providers';
-import { createGuestUser, getUser } from '@/lib/db/queries';
+import { getUser, isVerifiedOrgEmail } from '@/lib/db/queries';
 import { authConfig } from './auth.config';
 import { DUMMY_PASSWORD } from '@/lib/constants';
 import { isAdminEmail } from '@/lib/auth/admin';
 import type { DefaultJWT } from 'next-auth/jwt';
 
-export type UserType = 'guest' | 'free' | 'premium' | 'admin';
+export type UserType = 'free' | 'admin';
 
 declare module 'next-auth' {
   interface Session extends DefaultSession {
@@ -63,21 +63,19 @@ export const {
 
         if (!passwordsMatch) return null;
 
+        // Check if user has verified organization email (unless admin)
+        const isAdmin = isAdminEmail(user.email);
+        if (!isAdmin) {
+          const hasVerifiedOrgEmail = await isVerifiedOrgEmail(user.email);
+          if (!hasVerifiedOrgEmail) {
+            return null; // Reject non-admin users without verified org email
+          }
+        }
+
         // Determine user type based on admin status
-        // Note: Subscription status will be checked separately in the entitlements system
-        const userType: UserType = isAdminEmail(user.email) ? 'admin' : 'free';
+        const userType: UserType = isAdmin ? 'admin' : 'free';
 
         return { ...user, type: userType };
-      },
-    },
-    {
-      id: 'guest',
-      name: 'Guest',
-      type: 'credentials',
-      credentials: {},
-      async authorize() {
-        const [guestUser] = await createGuestUser();
-        return { ...guestUser, type: 'guest' };
       },
     },
   ] as Provider[],

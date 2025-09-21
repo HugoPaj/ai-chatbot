@@ -12,10 +12,27 @@ import {
   unique,
 } from 'drizzle-orm/pg-core';
 
+// Organizations (Universities/Companies) - defined first for references
+export const org = pgTable('Org', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  name: varchar('name', { length: 256 }).notNull(),
+  domain: varchar('domain', { length: 128 }).notNull().unique(), // e.g., "stanford.edu", "company.com"
+  type: varchar('type', { enum: ['university', 'company'] }).notNull().default('university'),
+  isActive: boolean('isActive').notNull().default(true),
+  maxUsersPerDay: varchar('maxUsersPerDay', { length: 16 }).notNull().default('-1'), // -1 for unlimited
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type Org = InferSelectModel<typeof org>;
+
 export const user = pgTable('User', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
   email: varchar('email', { length: 64 }).notNull(),
   password: varchar('password', { length: 64 }),
+  orgId: uuid('orgId').references(() => org.id),
+  isVerified: boolean('isVerified').notNull().default(false),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
 });
 
 export type User = InferSelectModel<typeof user>;
@@ -183,51 +200,22 @@ export const appSettings = pgTable('AppSettings', {
 
 export type AppSettings = InferSelectModel<typeof appSettings>;
 
-// Subscription plans
-export const subscriptionPlan = pgTable('SubscriptionPlan', {
-  id: uuid('id').primaryKey().notNull().defaultRandom(),
-  name: varchar('name', { length: 64 }).notNull(),
-  description: text('description'),
-  priceCents: varchar('priceCents', { length: 16 }).notNull(), // Store as string to handle large numbers
-  maxRequestsPerDay: varchar('maxRequestsPerDay', { length: 16 }).notNull(), // -1 for unlimited
-  stripePriceId: varchar('stripePriceId', { length: 128 }),
-  isActive: boolean('isActive').notNull().default(true),
-  createdAt: timestamp('createdAt').notNull().defaultNow(),
-});
 
-export type SubscriptionPlan = InferSelectModel<typeof subscriptionPlan>;
-
-// User subscriptions
-export const userSubscription = pgTable('UserSubscription', {
+// Organization admins
+export const orgAdmin = pgTable('OrgAdmin', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
   userId: uuid('userId')
     .notNull()
     .references(() => user.id),
-  planId: uuid('planId')
+  orgId: uuid('orgId')
     .notNull()
-    .references(() => subscriptionPlan.id),
-  stripeSubscriptionId: varchar('stripeSubscriptionId', { length: 128 }),
-  stripeCustomerId: varchar('stripeCustomerId', { length: 128 }),
-  status: varchar('status', {
-    enum: [
-      'active',
-      'canceled',
-      'incomplete',
-      'incomplete_expired',
-      'past_due',
-      'paused',
-      'trialing',
-      'unpaid',
-    ],
-  }).notNull(),
-  currentPeriodStart: timestamp('currentPeriodStart').notNull(),
-  currentPeriodEnd: timestamp('currentPeriodEnd').notNull(),
-  cancelAtPeriodEnd: boolean('cancelAtPeriodEnd').notNull().default(false),
+    .references(() => org.id),
+  canManageUsers: boolean('canManageUsers').notNull().default(true),
+  canViewAnalytics: boolean('canViewAnalytics').notNull().default(true),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
-  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 });
 
-export type UserSubscription = InferSelectModel<typeof userSubscription>;
+export type OrgAdmin = InferSelectModel<typeof orgAdmin>;
 
 // Daily usage tracking
 export const dailyUsage = pgTable(

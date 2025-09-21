@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { guestRegex, isDevelopmentEnvironment } from './lib/constants';
+import { isDevelopmentEnvironment } from './lib/constants';
 import { isAdminEmail } from './lib/auth/admin';
 
 export async function middleware(request: NextRequest) {
@@ -18,8 +18,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow Stripe webhook to bypass auth (but not admin endpoints)
-  if (pathname.startsWith('/api/stripe/webhook')) {
+  // Allow unauthenticated access to login page
+  if (pathname === '/login') {
     return NextResponse.next();
   }
 
@@ -33,22 +33,21 @@ export async function middleware(request: NextRequest) {
     const redirectUrl = encodeURIComponent(request.url);
 
     return NextResponse.redirect(
-      new URL(`/api/auth/guest?redirectUrl=${redirectUrl}`, request.url),
+      new URL(`/login?redirectUrl=${redirectUrl}`, request.url),
     );
   }
 
-  const isGuest = guestRegex.test(token?.email ?? '');
   const userEmail = token?.email ?? '';
   const isAdmin = isAdminEmail(userEmail);
 
-  // Redirect authenticated non-guest users away from auth pages
-  if (token && !isGuest && ['/login', '/register'].includes(pathname)) {
+  // Redirect authenticated users away from auth pages
+  if (token && pathname === '/login') {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
-  // Protect dashboard route - only allow authenticated non-guest users
+  // Protect dashboard route - only allow authenticated users
   if (pathname === '/dashboard') {
-    if (!token || isGuest) {
+    if (!token) {
       const redirectUrl = encodeURIComponent(request.url);
       return NextResponse.redirect(
         new URL(`/login?redirectUrl=${redirectUrl}`, request.url),
@@ -64,18 +63,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // Protect Stripe API routes - require authentication (except webhook)
-  if (
-    pathname.startsWith('/api/stripe') &&
-    !pathname.startsWith('/api/stripe/webhook')
-  ) {
-    if (!token || isGuest) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 },
-      );
-    }
-  }
 
   // Add user type to request headers for API routes to use
   const response = NextResponse.next();
@@ -85,7 +72,7 @@ export async function middleware(request: NextRequest) {
 
     // Ensure user type is properly set with fallbacks
     if (!userType) {
-      userType = isAdmin ? 'admin' : isGuest ? 'guest' : 'free';
+      userType = isAdmin ? 'admin' : 'free';
     }
 
     response.headers.set('x-user-id', token.id as string);
@@ -103,7 +90,6 @@ export const config = {
     '/dashboard',
     '/api/:path*',
     '/login',
-    '/register',
 
     /*
      * Match all request paths except for the ones starting with:

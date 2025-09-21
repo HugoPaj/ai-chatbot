@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { PlusIcon } from '@/components/icons';
 import { SidebarHistory } from '@/components/sidebar-history';
 import { SidebarUserNav } from '@/components/sidebar-user-nav';
-import { AdminPaywallToggle } from '@/components/admin-paywall-toggle';
 import { Button } from '@/components/ui/button';
 import {
   Sidebar,
@@ -65,7 +64,6 @@ export function AppSidebar({ user }: { user: User | undefined }) {
         <SidebarHistory user={user} />
       </SidebarContent>
       <SidebarFooter>
-        <AdminPaywallToggle isAdmin={isAdmin} />
         {user && <SidebarUserNav user={user} />}
       </SidebarFooter>
     </Sidebar>

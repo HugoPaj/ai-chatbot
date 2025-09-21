@@ -1,257 +1,622 @@
 
-# Delete Content of r2 bucket
-aws s3 rm s3://ragchatbot --endpoint-url https://86bfcd7c34b2294a200ff75184056984.r2.cloudflarestorage.com --recursive
+# AI Chatbot - Standalone Client Setup
 
-# Paywall System Implementation
+## 🏢 Overview
 
-## ✅ Completed Features
+This AI chatbot platform is designed for standalone client deployments. Each fork/deployment serves a single organization (university or company) with unlimited access for verified users. The system includes admin controls for user management and knowledge base administration.
 
-### 1. Global Paywall Toggle
-- **Admin Control**: As an admin, you can enable/disable the paywall system with a single click
-- **Location**: Admin toggle appears in the sidebar (only visible to admins)
-- **Behavior**: 
-  - When **disabled**: All users get unlimited access
-  - When **enabled**: Non-premium users limited to 5 requests/day
+## ✨ Key Features
 
-### 2. User Types & Entitlements
-- **Guest**: 5 requests/day (no account)
-- **Free**: 5 requests/day (registered account)
-- **Premium**: Unlimited requests (with subscription)
-- **Admin**: Unlimited requests (always bypass paywall)
+### 🎯 Business Model
+- **No Individual Subscriptions**: Removed traditional paywall and subscription system
+- **Single Organization Focus**: Each deployment serves one client organization
+- **Unlimited Access**: All verified organization users get unlimited requests
+- **Admin Control**: Platform admins manage users and knowledge base
 
-### 3. Daily Usage Tracking
-- Tracks requests per user per day
-- Automatic increment on each chat request
-- Persisted in database for accurate counting
+### 🔐 Access Control
+- **Organization Email Verification**: Users must sign in with verified org emails
+- **No Guest Access**: Public registration disabled, access by invitation only
+- **Single Organization**: Deployment configured for one specific organization
+- **Role-Based Permissions**: Platform admins and regular users
 
-### 4. Enhanced Authentication
-- Automatic user type detection based on admin status
-- Admin users identified by email in `lib/auth/admin.ts`
-- Subscription status checking for premium users
+### 📊 Admin Dashboard
+- **Admin Panel**: Manage platform settings and view analytics
+- **User Management**: Add/remove admin users
+- **Knowledge Base**: Upload documents for RAG (Retrieval-Augmented Generation)
+- **Platform Analytics**: Track usage and system metrics
 
-### 5. Database Schema
-- **AppSettings**: Global configuration storage
-- **SubscriptionPlan**: Subscription plan definitions
-- **UserSubscription**: User subscription tracking
-- **DailyUsage**: Daily request usage tracking
+## 🚀 Setup Guide
 
-## 🎛️ Admin Controls
+### Fresh Deployment Setup (Works Every Time)
 
-### Paywall Toggle
-1. Log in as an admin (your email: Hugo.Paja05@gmail.com)
-2. Look for the paywall toggle in the sidebar
-3. Click the toggle to enable/disable the paywall
-4. Confirmation dialog will explain the impact
+This process works for completely new deployments from a fresh git clone:
 
-### API Endpoints
-- `GET /api/admin/paywall` - Get current paywall status
-- `POST /api/admin/paywall` - Toggle paywall on/off
+#### 1. Setup Environment
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd ai-chatbot
 
-## 🔧 How It Works
+# Install dependencies
+npm install
 
-### Request Flow
-1. User makes a chat request
-2. System checks if paywall is enabled globally
-3. If disabled → Allow unlimited access for everyone
-4. If enabled → Check user type and subscription
-5. Track daily usage and enforce limits
-6. Show paywall modal when limits exceeded
-
-### Admin Bypass
-- Admins always get unlimited access regardless of paywall status
-- Admin status determined by email in `ADMIN_EMAILS` array
-
-## 🚀 Quick Test
-
-1. **Enable Paywall**: Use the admin toggle in sidebar
-2. **Test Limits**: Create a test account and make 6 requests
-3. **Disable Paywall**: Toggle it off and test unlimited access
-4. **Admin Access**: Switch to admin account for unlimited access
-
-## 🎯 Usage Limits
-
-| User Type | Paywall Enabled | Paywall Disabled |
-|-----------|-----------------|------------------|
-| Guest     | 5/day           | Unlimited        |
-| Free      | 5/day           | Unlimited        |
-| Premium   | Unlimited       | Unlimited        |
-| Admin     | Unlimited       | Unlimited        |
-
-## 💳 Stripe Payment Integration
-
-### ✅ Completed Features
-- **Stripe Checkout**: Full subscription checkout flow
-- **Webhook Handling**: Real-time subscription sync with database
-- **Customer Portal**: Users can manage subscriptions via Stripe portal
-- **Subscription Dashboard**: In-app subscription management UI
-- **Payment Processing**: Secure payment handling via Stripe
-- **Database Sync**: Automatic subscription status updates
-
-### 🛠️ Setup Required
-1. **Stripe Account**: Create account and get API keys
-2. **Environment Variables**: Configure Stripe keys (see `STRIPE_SETUP.md`)
-3. **Product Setup**: Create Premium Monthly product in Stripe ($9.99/month)
-4. **Webhook Configuration**: Set up webhook endpoint for subscription events
-
-### 🔄 Payment Flow
-1. User clicks "Upgrade to Premium"
-2. Stripe checkout session created
-3. User completes payment on Stripe
-4. Webhook receives subscription event
-5. Database updated with subscription status
-6. User gets unlimited access immediately
-
-## 📋 Remaining Features (Future)
-
-- Advanced billing features (usage-based, multiple plans)
-- Subscription analytics and reporting
-- Promotional codes and discounts
-- Annual subscription options
-
-## 🛠️ Files Modified/Created
-
-### Core Logic
-- `lib/db/schema.ts` - Database schema
-- `lib/ai/user-entitlements.ts` - Entitlements logic
-- `lib/db/queries.ts` - Database queries
-- `app/(auth)/auth.ts` - User type system
-- `app/(chat)/api/chat/route.ts` - Request handling
-
-### Admin Features
-- `app/api/admin/paywall/route.ts` - Admin API
-- `components/admin-paywall-toggle.tsx` - Toggle component
-- `components/app-sidebar.tsx` - Sidebar integration
-
-### Stripe Integration
-- `lib/stripe/config.ts` - Stripe configuration
-- `lib/stripe/client.ts` - Client-side Stripe utilities
-- `lib/stripe/subscription.ts` - Subscription management
-- `app/api/stripe/webhook/route.ts` - Webhook handler
-- `app/api/stripe/create-checkout/route.ts` - Checkout API
-- `app/api/stripe/customer-portal/route.ts` - Customer portal API
-
-### UI Components
-- `components/paywall-modal.tsx` - Limit reached modal (with Stripe integration)
-- `components/subscription-dashboard.tsx` - User subscription management
-- `app/dashboard/page.tsx` - Dashboard page
-
-### Scripts & Documentation
-- `scripts/seed-subscription-plans.ts` - Database seeding
-- `STRIPE_SETUP.md` - Complete Stripe setup guide
-
-# Stripe Integration Setup Guide
-
-## Environment Variables Required
-
-Add these variables to your `.env.local` file:
-
-```env
-# Stripe Configuration
-STRIPE_SECRET_KEY=sk_test_...
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PREMIUM_PRICE_ID=price_...
-
-# App URL (required for Stripe redirects)
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+# Create environment file
+cp .env.example .env.local
 ```
 
-## Stripe Dashboard Setup
+#### 2. Configure Admin Access
+Edit `lib/auth/admin.ts`:
+```typescript
+const ADMIN_EMAILS = [
+  'your-email@domain.com', // Replace with YOUR email
+];
+```
 
-### 1. Create Stripe Account
-1. Go to [https://stripe.com](https://stripe.com)
-2. Create an account or sign in
-3. Switch to **Test mode** for development
+#### 3. Setup Database Connection
+Add your database URL to `.env.local`:
+```env
+# Use a fresh/empty database
+POSTGRES_URL=postgresql://username:password@host:5432/fresh_database_name
 
-### 2. Get API Keys
-1. Go to **Developers** → **API Keys**
-2. Copy your **Publishable key** → `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
-3. Copy your **Secret key** → `STRIPE_SECRET_KEY`
+# Other required environment variables
+AUTH_SECRET=your-auth-secret
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+ANTHROPIC_API_KEY=your-anthropic-key
+# ... other API keys
+```
 
-### 3. Create Product and Price
-1. Go to **Products** → **Add Product**
-2. Product details:
-   - **Name**: Premium Monthly
-   - **Description**: Unlimited requests and premium support
-3. Pricing:
-   - **Pricing model**: Standard pricing
-   - **Price**: $9.99 USD
-   - **Billing period**: Monthly
-4. Save the product
-5. Copy the **Price ID** (starts with `price_`) → `STRIPE_PREMIUM_PRICE_ID`
-
-### 4. Set Up Webhooks
-1. Go to **Developers** → **Webhooks**
-2. Click **Add endpoint**
-3. Endpoint URL: `http://localhost:3000/api/stripe/webhook` (for local dev)
-4. Select events to send:
-   - `customer.subscription.created`
-   - `customer.subscription.updated`
-   - `customer.subscription.deleted`
-   - `checkout.session.completed`
-   - `invoice.payment_succeeded`
-   - `invoice.payment_failed`
-5. Save the endpoint
-6. Copy the **Signing secret** → `STRIPE_WEBHOOK_SECRET`
-
-## Production Setup
-
-For production deployment:
-
-1. Switch to **Live mode** in Stripe dashboard
-2. Get live API keys and update environment variables
-3. Update webhook endpoint URL to your production domain
-4. Update `NEXT_PUBLIC_APP_URL` to your production URL
-
-## Testing the Integration
-
-### Local Development
-1. Install Stripe CLI: `brew install stripe/stripe-cli/stripe` (macOS) or download from Stripe
-2. Login: `stripe login`
-3. Forward webhooks: `stripe listen --forward-to localhost:3000/api/stripe/webhook`
-4. Use the webhook signing secret from the CLI output
-
-### Test Cards
-Use these test card numbers in development:
-- **Success**: 4242 4242 4242 4242
-- **Decline**: 4000 0000 0000 0002
-- **3D Secure**: 4000 0025 0000 3155
-
-## Current Implementation Features
-
-✅ **Completed**:
-- Stripe checkout session creation
-- Webhook handling for subscription events
-- Customer portal for subscription management
-- Database sync with Stripe data
-- Subscription dashboard UI
-- Paywall integration with Stripe checkout
-
-🚧 **In Progress**:
-- Admin subscription management
-- Advanced billing features
-- Usage-based billing (future enhancement)
-
-## Commands
-
+#### 4. Run Migrations (Creates All Tables)
 ```bash
-# Seed subscription plans (run after setting up Stripe)
-npx tsx scripts/seed-subscription-plans.ts
-
-# Generate new migration (if needed)
-npx drizzle-kit generate
-
-# Run migrations
+# This creates all tables including the Org table
 npx tsx lib/db/migrate.ts
 ```
 
-## Support
+#### 5. Add Client Organization Domain
+```sql
+-- Add client's email domain for user access
+INSERT INTO "Org" (name, domain, type, "isActive", "maxUsersPerDay") VALUES
+('Stanford University', 'stanford.edu', 'university', true, '-1');
+-- Replace with client's actual name and domain
+```
 
-If you encounter issues:
-1. Check Stripe webhook logs in dashboard
-2. Verify environment variables are set correctly
-3. Ensure webhook endpoint is accessible
-4. Check application logs for error details
+#### 6. Test Setup
+```bash
+# Start the application
+npm run dev
+
+# Visit http://localhost:3000/login
+# Sign in with your admin email (hugo.paja05@gmail.com)
+# Password: admin123 (change this!)
+# Access /dashboard to see admin panel
+```
+
+**✅ What You Should See:**
+- Login page at `localhost:3000/login`
+- Successful admin login
+- Admin dashboard at `/dashboard` with:
+  - User management panel
+  - Document upload for knowledge base
+  - Platform analytics
+- Client users can sign in with their organization emails
+
+## 🧹 Clean Start Workflow for Each Client
+
+### When to Use This
+- Setting up for a new client
+- Starting fresh after testing/development
+- Moving from development to production
+
+### Complete Clean Start Steps
+
+**1. Create Fresh Environment File**
+```bash
+# Copy your template and modify for new client
+cp .env.local .env.stanford  # Example for Stanford
+```
+
+**2. Database - Choose One:**
+
+**Option A: Brand New Database (Recommended)**
+```sql
+CREATE DATABASE stanford_ai_chatbot;
+```
+```env
+POSTGRES_URL=postgresql://user:pass@host:5432/stanford_ai_chatbot
+```
+
+**Option B: Clear Existing Database**
+```sql
+-- Run these in order to clear all data
+TRUNCATE TABLE "DailyUsage" CASCADE;
+TRUNCATE TABLE "OrgAdmin" CASCADE;
+TRUNCATE TABLE "Suggestion" CASCADE;
+TRUNCATE TABLE "Vote_v2" CASCADE;
+TRUNCATE TABLE "Message_v2" CASCADE;
+TRUNCATE TABLE "Stream" CASCADE;
+TRUNCATE TABLE "Chat" CASCADE;
+TRUNCATE TABLE "User" CASCADE;
+TRUNCATE TABLE "Org" CASCADE;
+TRUNCATE TABLE "AppSettings" CASCADE;
+TRUNCATE TABLE "Document" CASCADE;
+```
+
+**3. Redis - Choose One:**
+
+**Option A: New Redis Database**
+- Create new database on Redis Cloud/Upstash
+- Update `REDIS_URL` in environment
+
+**Option B: Clear Existing Redis**
+```bash
+redis-cli
+SELECT 0  # or your database number
+FLUSHDB
+```
+
+**4. R2 Storage - Choose One:**
+
+**Option A: New Bucket**
+```bash
+aws s3 mb s3://stanford-ai-files --endpoint-url https://your-account.r2.cloudflarestorage.com
+```
+
+**Option B: Clear Existing Bucket**
+```bash
+aws s3 rm s3://your-existing-bucket --recursive --endpoint-url https://your-account.r2.cloudflarestorage.com
+```
+
+**5. Run Migrations & Setup**
+```bash
+# Create all tables fresh
+npx tsx lib/db/migrate.ts
+
+# Add client organization
+psql $POSTGRES_URL -c "
+INSERT INTO \"Org\" (name, domain, type, \"isActive\", \"maxUsersPerDay\") VALUES
+('Stanford University', 'stanford.edu', 'university', true, '-1'),
+('Platform Admin', 'gmail.com', 'company', true, '-1');
+"
+```
+
+**6. Test Clean Start**
+```bash
+# Start development server
+npm run dev
+
+# Visit localhost:3000
+# Try signing in with admin email
+# Check dashboard shows empty/clean state
+```
+
+### Per-Client Deployment Setup
+
+When deploying for each new client (university/company), follow these steps:
+
+#### 1. Environment Variables (CRITICAL - Change for Each Client)
+
+Create a new `.env.local` file for each deployment:
+
+```env
+# ============================================
+# DATABASE (UNIQUE PER CLIENT)
+# ============================================
+POSTGRES_URL=postgresql://username:password@your-client-db.com:5432/clientname_db
+
+# ============================================
+# AUTHENTICATION (UNIQUE PER CLIENT)
+# ============================================
+AUTH_SECRET=generate-new-secret-for-each-client
+NEXT_PUBLIC_APP_URL=https://client-specific-domain.com
+
+# ============================================
+# AI PROVIDERS (CAN BE SHARED OR UNIQUE)
+# ============================================
+ANTHROPIC_API_KEY=your-anthropic-key
+OPENAI_API_KEY=your-openai-key
+XAI_API_KEY=your-xai-key
+
+# ============================================
+# STORAGE - R2/S3 (UNIQUE PER CLIENT)
+# ============================================
+CLOUDFLARE_ACCOUNT_ID=your-account-id
+CLOUDFLARE_ACCESS_KEY_ID=unique-per-client-key
+CLOUDFLARE_SECRET_ACCESS_KEY=unique-per-client-secret
+CLOUDFLARE_BUCKET_NAME=client-specific-bucket-name
+CLOUDFLARE_BUCKET_URL=https://client-bucket.r2.cloudflarestorage.com
+
+# ============================================
+# REDIS (UNIQUE PER CLIENT)
+# ============================================
+REDIS_URL=redis://client-specific-redis.com:6379
+
+# ============================================
+# OTHER SERVICES (OPTIONAL)
+# ============================================
+DOCLING_URL=http://localhost:8080  # If using document processing
+```
+
+#### 2. Database Setup (Per Client) - FRESH START
+
+**Option A: Completely New Database (Recommended)**
+```sql
+-- Create a brand new database for each client
+CREATE DATABASE stanford_ai_chatbot;
+CREATE DATABASE mit_ai_chatbot;
+CREATE DATABASE google_ai_chatbot;
+```
+
+**Option B: Same Database, Clear All Data**
+```sql
+-- If reusing the same database, clear all data first
+TRUNCATE TABLE "DailyUsage" CASCADE;
+TRUNCATE TABLE "OrgAdmin" CASCADE;
+TRUNCATE TABLE "Org" CASCADE;
+TRUNCATE TABLE "Vote_v2" CASCADE;
+TRUNCATE TABLE "Message_v2" CASCADE;
+TRUNCATE TABLE "Chat" CASCADE;
+TRUNCATE TABLE "User" CASCADE;
+TRUNCATE TABLE "AppSettings" CASCADE;
+-- Add other tables as needed
+```
+
+**Step 2: Update Environment Variables**
+```env
+# Update POSTGRES_URL to point to new database
+POSTGRES_URL=postgresql://username:password@host:5432/stanford_ai_chatbot
+```
+
+**Step 3: Run Migrations on Fresh Database**
+```bash
+# This will create all tables from scratch
+npx tsx lib/db/migrate.ts
+```
+
+**Step 4: Add Client Organization**
+```sql
+-- Add the client's organization (this is the FIRST entry in fresh DB)
+INSERT INTO "Org" (name, domain, type, "isActive", "maxUsersPerDay") VALUES
+('Stanford University', 'stanford.edu', 'university', true, '-1');
+
+-- Add multiple domains if needed
+INSERT INTO "Org" (name, domain, type, "isActive", "maxUsersPerDay") VALUES
+('Stanford Medical', 'med.stanford.edu', 'university', true, '-1');
+```
+
+**Step 5: Add Your Admin Access (Per Client)**
+```sql
+-- Add your admin domain so you can access this client's platform
+INSERT INTO "Org" (name, domain, type, "isActive", "maxUsersPerDay") VALUES
+('Platform Admin', 'gmail.com', 'company', true, '-1');
+```
+
+#### 3. Redis Setup (Per Client)
+
+**Option A: Separate Redis Instance Per Client (Most Secure)**
+```bash
+# Create new Redis database for each client
+# On Redis Cloud/Upstash - create new database
+# Update environment variable:
+REDIS_URL=redis://username:password@redis-stanford.upstash.io:6379
+```
+
+**Option B: Same Redis, Different Database Numbers**
+```env
+# Use different database numbers (0-15 available)
+REDIS_URL=redis://username:password@your-redis.com:6379/0  # Client 1
+REDIS_URL=redis://username:password@your-redis.com:6379/1  # Client 2
+REDIS_URL=redis://username:password@your-redis.com:6379/2  # Client 3
+```
+
+**Option C: Clear Redis Data (If Reusing)**
+```bash
+# Connect to Redis and clear all data
+redis-cli
+FLUSHDB  # Clears current database
+# or
+FLUSHALL # Clears all databases (CAREFUL!)
+```
+
+#### 4. Storage Setup (Per Client)
+
+**Create Unique R2 Bucket:**
+```bash
+# Create new bucket for each client
+aws s3 mb s3://stanford-chatbot-files --endpoint-url https://your-account.r2.cloudflarestorage.com
+aws s3 mb s3://mit-chatbot-files --endpoint-url https://your-account.r2.cloudflarestorage.com
+
+# Set up CORS if needed
+aws s3api put-bucket-cors --bucket stanford-chatbot-files --cors-configuration file://cors.json --endpoint-url https://your-account.r2.cloudflarestorage.com
+```
+
+**Clear Existing R2 Bucket (If Reusing):**
+```bash
+# Delete all content from existing bucket
+aws s3 rm s3://your-bucket-name --recursive --endpoint-url https://your-account.r2.cloudflarestorage.com
+```
+
+#### 4. Domain/Deployment Setup (Per Client)
+
+**Update App Configuration:**
+- Deploy to client-specific domain: `https://ai.stanford.edu`
+- Update `NEXT_PUBLIC_APP_URL` to match
+- Configure SSL certificates for the domain
+
+#### 5. Client-Specific Customization (Optional)
+
+**Branding (if offering white-label):**
+- Update logo in `public/` folder
+- Modify colors in `tailwind.config.js`
+- Update site title in `app/layout.tsx`
+
+**Model Access (if different per client):**
+- Modify `lib/ai/entitlements.ts` if client has specific model requirements
+- Update API keys if client provides their own AI service accounts
+
+### Quick Client Deployment Checklist
+
+```markdown
+## Pre-Deployment Checklist
+
+### Infrastructure
+- [ ] New database created and configured
+- [ ] New R2 bucket created
+- [ ] Redis instance configured (if separate)
+- [ ] Domain/subdomain configured with SSL
+
+### Environment Variables
+- [ ] POSTGRES_URL updated for client database
+- [ ] AUTH_SECRET generated (unique per client)
+- [ ] NEXT_PUBLIC_APP_URL updated to client domain
+- [ ] CLOUDFLARE_BUCKET_NAME updated to client bucket
+- [ ] CLOUDFLARE_ACCESS_KEY_ID/SECRET updated
+
+### Database Setup
+- [ ] Migrations run successfully
+- [ ] Client organization added to database
+- [ ] Admin access organization added
+- [ ] Test user sign-in with client email
+
+### Testing
+- [ ] Admin can sign in and access dashboard
+- [ ] Client users can sign in with org email
+- [ ] Chat functionality works
+- [ ] File uploads work (if enabled)
+- [ ] All AI models accessible
+
+### Post-Deployment
+- [ ] Provide client with platform URL
+- [ ] Document client-specific access domains
+- [ ] Set up monitoring/analytics (if needed)
+```
+
+### Super Admin Management Workflow
+
+Once deployed for multiple clients:
+
+1. **Multi-Client Access**: You can sign in to any client's platform using your admin email (as long as you've added your domain to their database)
+
+2. **Organization Management**: Through each client's dashboard, you can:
+   - Add/remove their organization domains
+   - Monitor usage across their organization
+   - Adjust settings per organization
+
+3. **Centralized vs Distributed**:
+   - **Distributed** (Recommended): Each client has their own database/deployment
+   - **Centralized** (Alternative): Single database with multiple organizations (less secure, but easier to manage)
+
+### Security Notes
+
+⚠️ **CRITICAL**: Never share the same:
+- Database between clients
+- AUTH_SECRET between deployments
+- R2 buckets between clients
+- Environment variables between clients
+
+✅ **OK to Share**:
+- AI API keys (if you're paying for them)
+- Your admin email domain (for access)
+- Base application code
+
+## 🏗️ Architecture
+
+### User Types & Access
+| User Type | Access Level | Features |
+|-----------|-------------|----------|
+| **Guest** | None | Must sign in with org email |
+| **Organization User** | Unlimited | All AI models, unlimited requests |
+| **Super Admin** | Full Control | Manage organizations, analytics, settings |
+
+### Database Schema
+- **`Org`**: Organization information (name, domain, type, settings)
+- **`OrgAdmin`**: Organization administrators
+- **`User`**: User accounts with organization association
+- **`AppSettings`**: Global platform configuration
+
+### Authentication Flow
+1. User visits platform → Redirected to org sign-in page
+2. User enters organization email address
+3. System verifies email domain against registered organizations
+4. If verified → Grant unlimited access
+5. If not verified → Access denied
+
+## 🎛️ Organization Management
+
+### Adding Organizations
+
+**Via Admin Dashboard:**
+1. Sign in as super admin
+2. Go to Dashboard → Organization Management
+3. Click "Add Organization"
+4. Fill in organization details:
+   - Name (e.g., "Stanford University")
+   - Domain (e.g., "stanford.edu")
+   - Type (University or Company)
+   - User limits (optional)
+
+**Via Database:**
+```sql
+INSERT INTO "Org" (name, domain, type, "isActive", "maxUsersPerDay")
+VALUES ('Stanford University', 'stanford.edu', 'university', true, '-1');
+```
+
+### Organization Settings
+- **Name**: Display name for the organization
+- **Domain**: Email domain for user verification (e.g., "stanford.edu")
+- **Type**: University or Company (for categorization)
+- **Status**: Active/Inactive (controls access)
+- **User Limits**: Optional daily request limits per organization
+
+## 🔧 Technical Implementation
+
+### Key Files Modified/Created
+
+#### Authentication & Access Control
+- `app/(auth)/auth.ts` - Organization email verification
+- `lib/db/queries.ts` - Organization lookup functions
+- `lib/ai/user-entitlements.ts` - Unlimited access for org users
+- `middleware.ts` - Removed subscription-related middleware
+
+#### Database Schema
+- `lib/db/schema.ts` - Organization and admin tables
+- `lib/db/migrations/` - Database migration files
+
+#### UI Components
+- `components/org-signin-form.tsx` - Organization sign-in form
+- `components/admin/org-management.tsx` - Admin organization management
+- `app/dashboard/page.tsx` - Admin dashboard with org management
+
+#### Removed Components (Paywall System)
+- ~~`components/paywall-modal.tsx`~~ - Removed
+- ~~`components/subscription-dashboard.tsx`~~ - Removed
+- ~~`app/api/stripe/`~~ - All Stripe integration removed
+- ~~`lib/stripe/`~~ - Stripe library removed
+
+### Organization Verification Process
+
+```typescript
+// Check if email domain is from verified organization
+export async function isVerifiedOrgEmail(email: string): Promise<boolean> {
+  const domain = email.split('@')[1];
+  if (!domain) return false;
+
+  const organization = await getOrgByDomain(domain);
+  return organization?.isActive ?? false;
+}
+```
+
+### Admin Permissions
+```typescript
+// Admin check in components/pages
+const isAdmin = isAdminEmail(user.email);
+
+if (isAdmin) {
+  // Show admin dashboard with org management
+} else {
+  // Show regular user dashboard
+}
+```
+
+## 🎯 User Experience
+
+### For Organization Users
+1. **Sign In**: Visit platform and sign in with organization email
+2. **Immediate Access**: Get unlimited access to all AI models
+3. **No Restrictions**: No daily limits or premium features
+4. **Dashboard**: Simple dashboard showing account status
+
+### For Super Admins
+1. **Organization Management**: Add/remove organizations
+2. **Analytics Dashboard**: View usage across all organizations
+3. **User Management**: Monitor user activity and access
+4. **Platform Settings**: Configure global platform settings
+
+### For Organization Admins (Future)
+- View their organization's usage analytics
+- Manage organization-specific settings
+- Add/remove organization users (planned feature)
+
+## 🔄 Migration from Paywall System
+
+### What Was Removed
+- ✅ All Stripe payment integration
+- ✅ Subscription plans and user subscriptions
+- ✅ Paywall modal and limits
+- ✅ Daily usage tracking enforcement
+- ✅ Registration page (users must exist in organizations)
+
+### What Was Added
+- ✅ Organization database schema
+- ✅ Email domain verification
+- ✅ Admin organization management
+- ✅ Organization-based authentication
+- ✅ Super admin dashboard
+
+### Database Changes
+```sql
+-- Added tables
+CREATE TABLE "Org" (...);
+CREATE TABLE "OrgAdmin" (...);
+
+-- Modified tables
+ALTER TABLE "User" ADD COLUMN "orgId" uuid REFERENCES "Org"(id);
+ALTER TABLE "User" ADD COLUMN "isVerified" boolean DEFAULT false;
+
+-- Removed tables
+-- DROP TABLE "SubscriptionPlan"; -- (via migration)
+-- DROP TABLE "UserSubscription"; -- (via migration)
+```
+
+## 🚀 Deployment Checklist
+
+### Environment Variables
+```env
+# Database
+POSTGRES_URL=postgresql://...
+
+# Authentication
+AUTH_SECRET=your-auth-secret
+NEXT_PUBLIC_APP_URL=https://your-domain.com
+
+# AI Providers
+ANTHROPIC_API_KEY=your-anthropic-key
+# ... other AI provider keys
+```
+
+### Pre-Deployment Steps
+1. ✅ Configure super admin email in `lib/auth/admin.ts`
+2. ✅ Run database migrations
+3. ✅ Add initial organizations to database
+4. ✅ Test organization email verification
+5. ✅ Verify admin dashboard access
+
+### Post-Deployment
+1. Sign in as super admin
+2. Add organizations via admin dashboard
+3. Test user sign-in with organization emails
+4. Monitor usage analytics
+5. Configure organization-specific settings as needed
+
+## 🎯 Business Benefits
+
+### For Platform Owner
+- **Predictable Revenue**: Annual organization licenses
+- **Lower Support**: No individual billing issues
+- **Scalable**: Easy to add new organizations
+- **Enterprise Focus**: Target universities and companies
+
+### For Organizations
+- **Unlimited Access**: No per-user limits
+- **Cost Effective**: One fee for entire organization
+- **Easy Management**: Users sign in with existing email
+- **No Individual Accounts**: No user management overhead
+
+### For End Users
+- **Seamless Access**: Sign in with work/school email
+- **No Limits**: Unlimited requests and full features
+- **No Billing**: No individual payment required
+- **Instant Access**: Immediate access upon sign-in
+
+This organization-based system provides a robust, scalable platform suitable for enterprise customers while eliminating the complexity of individual user subscriptions and billing.
 
 # Multi-Model Chat System
 

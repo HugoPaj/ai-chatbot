@@ -8,7 +8,7 @@ const ADMIN_EMAILS = [
   // Add admin email addresses here
   // 'admin@example.com',
   // 'another-admin@example.com',
-  'Hugo.Paja05@gmail.com',
+  'hugo.paja05@gmail.com',
 ];
 
 /**

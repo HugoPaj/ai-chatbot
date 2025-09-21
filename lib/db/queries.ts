@@ -28,11 +28,11 @@ import {
   type Chat,
   stream,
   appSettings,
-  subscriptionPlan,
-  type SubscriptionPlan,
-  userSubscription,
-  type UserSubscription,
   dailyUsage,
+  org,
+  type Org,
+  orgAdmin,
+  type OrgAdmin,
 } from './schema';
 import type { ArtifactKind } from '@/components/artifact';
 import { generateUUID } from '../utils';
@@ -69,22 +69,6 @@ export async function createUser(email: string, password: string) {
   }
 }
 
-export async function createGuestUser() {
-  const email = `guest-${Date.now()}`;
-  const password = generateHashedPassword(generateUUID());
-
-  try {
-    return await db.insert(user).values({ email, password }).returning({
-      id: user.id,
-      email: user.email,
-    });
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to create guest user',
-    );
-  }
-}
 
 export async function saveChat({
   id,
@@ -608,26 +592,29 @@ export async function setAppSetting({
   }
 }
 
-// Paywall control functions
-export async function isPaywallEnabled(): Promise<boolean> {
+// Organization functions
+export async function getOrgByDomain(domain: string): Promise<Org | null> {
   try {
-    const enabled = await getAppSetting('paywall_enabled');
-    return enabled === 'true';
+    const orgs = await db
+      .select()
+      .from(org)
+      .where(eq(org.domain, domain))
+      .limit(1);
+    return orgs[0] ?? null;
   } catch (error) {
-    // Default to enabled if setting doesn't exist
-    return true;
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get organization by domain',
+    );
   }
 }
 
-export async function setPaywallEnabled(
-  enabled: boolean,
-  updatedBy: string,
-): Promise<void> {
-  await setAppSetting({
-    key: 'paywall_enabled',
-    value: enabled.toString(),
-    updatedBy,
-  });
+export async function isVerifiedOrgEmail(email: string): Promise<boolean> {
+  const domain = email.split('@')[1];
+  if (!domain) return false;
+
+  const organization = await getOrgByDomain(domain);
+  return organization?.isActive ?? false;
 }
 
 // Daily usage tracking functions
@@ -696,66 +683,3 @@ export async function incrementDailyUsage({
   }
 }
 
-// Subscription functions
-export async function getUserSubscription(
-  userId: string,
-): Promise<UserSubscription | null> {
-  try {
-    const subscription = await db
-      .select()
-      .from(userSubscription)
-      .where(
-        and(
-          eq(userSubscription.userId, userId),
-          eq(userSubscription.status, 'active'),
-        ),
-      )
-      .limit(1)
-      .execute();
-
-    return subscription[0] ?? null;
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get user subscription',
-    );
-  }
-}
-
-export async function getSubscriptionPlan(
-  planId: string,
-): Promise<SubscriptionPlan | null> {
-  try {
-    const plan = await db
-      .select()
-      .from(subscriptionPlan)
-      .where(eq(subscriptionPlan.id, planId))
-      .limit(1)
-      .execute();
-
-    return plan[0] ?? null;
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get subscription plan',
-    );
-  }
-}
-
-export async function getActiveSubscriptionPlans(): Promise<
-  SubscriptionPlan[]
-> {
-  try {
-    return await db
-      .select()
-      .from(subscriptionPlan)
-      .where(eq(subscriptionPlan.isActive, true))
-      .orderBy(asc(subscriptionPlan.priceCents))
-      .execute();
-  } catch (error) {
-    throw new ChatSDKError(
-      'bad_request:database',
-      'Failed to get active subscription plans',
-    );
-  }
-}

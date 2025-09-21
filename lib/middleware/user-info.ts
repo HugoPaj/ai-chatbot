@@ -37,18 +37,4 @@ export function isAdminFromHeaders(request: NextRequest): boolean {
   return userInfo?.type === 'admin';
 }
 
-/**
- * Check if the request is from a guest user based on middleware headers
- */
-export function isGuestFromHeaders(request: NextRequest): boolean {
-  const userInfo = getUserInfoFromHeaders(request);
-  return userInfo?.type === 'guest';
-}
 
-/**
- * Check if the request is from a premium user based on middleware headers
- */
-export function isPremiumFromHeaders(request: NextRequest): boolean {
-  const userInfo = getUserInfoFromHeaders(request);
-  return userInfo?.type === 'premium';
-}
