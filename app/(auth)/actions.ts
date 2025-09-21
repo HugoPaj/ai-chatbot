@@ -2,8 +2,6 @@
 
 import { z } from 'zod/v3';
 
-import { createUser, getUser, isVerifiedOrgEmail } from '@/lib/db/queries';
-
 import { signIn } from './auth';
 
 const authFormSchema = z.object({

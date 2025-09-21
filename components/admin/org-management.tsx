@@ -1,86 +1,186 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building2, Plus, Users, Settings } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { UserCog, Plus, Mail, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from '@/components/toast';
 
-interface Organization {
+interface OrgAdmin {
   id: string;
-  name: string;
-  domain: string;
-  type: 'university' | 'company';
-  isActive: boolean;
-  maxUsersPerDay: string;
-  userCount?: number;
+  email: string;
+  canManageUsers: boolean;
+  canViewAnalytics: boolean;
+  createdAt: string;
+  isCurrentUser?: boolean;
 }
 
-// Mock data for demonstration
-const mockOrganizations: Organization[] = [
-  {
-    id: '1',
-    name: 'Stanford University',
-    domain: 'stanford.edu',
-    type: 'university',
-    isActive: true,
-    maxUsersPerDay: '-1',
-    userCount: 245,
-  },
-  {
-    id: '2',
-    name: 'Acme Corporation',
-    domain: 'acme.com',
-    type: 'company',
-    isActive: true,
-    maxUsersPerDay: '500',
-    userCount: 78,
-  },
-];
-
 export function OrgManagement() {
-  const [organizations, setOrganizations] = useState(mockOrganizations);
-  const [newOrg, setNewOrg] = useState({
-    name: '',
-    domain: '',
-    type: 'university' as 'university' | 'company',
-    maxUsersPerDay: '-1',
+  const [orgAdmins, setOrgAdmins] = useState<OrgAdmin[]>([]);
+  const [newAdmin, setNewAdmin] = useState({
+    email: '',
+    canManageUsers: true,
+    canViewAnalytics: true,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
-  const handleAddOrganization = async (e: React.FormEvent) => {
+  // Fetch organization admins on component mount
+  useEffect(() => {
+    fetchOrgAdmins();
+  }, []);
+
+  const fetchOrgAdmins = async () => {
+    try {
+      setIsLoadingData(true);
+      const response = await fetch('/api/admin/org-admins');
+      if (response.ok) {
+        const data = await response.json();
+        setOrgAdmins(data);
+      } else {
+        toast({
+          type: 'error',
+          description: 'Failed to load organization admins',
+        });
+      }
+    } catch (error) {
+      toast({
+        type: 'error',
+        description: 'Failed to load organization admins',
+      });
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  const handleAddOrgAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!newAdmin.email.trim()) {
+      toast({
+        type: 'error',
+        description: 'Please enter an email address',
+      });
+      return;
+    }
+
+    if (!newAdmin.email.includes('@')) {
+      toast({
+        type: 'error',
+        description: 'Please enter a valid email address',
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      // TODO: Replace with actual API call
-      const newOrgData: Organization = {
-        id: Date.now().toString(),
-        ...newOrg,
-        isActive: true,
-        userCount: 0,
-      };
+      const response = await fetch('/api/admin/org-admins', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: newAdmin.email,
+          canManageUsers: newAdmin.canManageUsers,
+          canViewAnalytics: newAdmin.canViewAnalytics,
+        }),
+      });
 
-      setOrganizations([...organizations, newOrgData]);
-      setNewOrg({ name: '', domain: '', type: 'university', maxUsersPerDay: '-1' });
+      if (response.ok) {
+        setNewAdmin({ email: '', canManageUsers: true, canViewAnalytics: true });
+        await fetchOrgAdmins(); // Refresh the list
+
+        toast({
+          type: 'success',
+          description: `Added ${newAdmin.email} as organization admin`,
+        });
+      } else {
+        toast({
+          type: 'error',
+          description: 'Failed to add organization admin',
+        });
+      }
     } catch (error) {
-      console.error('Failed to add organization:', error);
+      toast({
+        type: 'error',
+        description: 'Failed to add organization admin',
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const toggleOrganization = async (orgId: string) => {
+  const handleRemoveOrgAdmin = async (adminId: string, email: string, isCurrentUser?: boolean) => {
+    if (isCurrentUser) {
+      toast({
+        type: 'error',
+        description: 'Cannot remove yourself as admin',
+      });
+      return;
+    }
+
     try {
-      setOrganizations(
-        organizations.map((org) =>
-          org.id === orgId ? { ...org, isActive: !org.isActive } : org
-        )
-      );
+      const response = await fetch(`/api/admin/org-admins/${adminId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchOrgAdmins(); // Refresh the list
+
+        toast({
+          type: 'success',
+          description: `Removed ${email} as organization admin`,
+        });
+      } else {
+        toast({
+          type: 'error',
+          description: 'Failed to remove organization admin',
+        });
+      }
     } catch (error) {
-      console.error('Failed to toggle organization:', error);
+      toast({
+        type: 'error',
+        description: 'Failed to remove organization admin',
+      });
+    }
+  };
+
+  const handleUpdatePermissions = async (adminId: string, canManageUsers: boolean, canViewAnalytics: boolean) => {
+    try {
+      const response = await fetch(`/api/admin/org-admins/${adminId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          canManageUsers,
+          canViewAnalytics,
+        }),
+      });
+
+      if (response.ok) {
+        await fetchOrgAdmins(); // Refresh the list
+
+        toast({
+          type: 'success',
+          description: 'Permissions updated successfully',
+        });
+      } else {
+        toast({
+          type: 'error',
+          description: 'Failed to update permissions',
+        });
+      }
+    } catch (error) {
+      toast({
+        type: 'error',
+        description: 'Failed to update permissions',
+      });
     }
   };
 
@@ -88,141 +188,156 @@ export function OrgManagement() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Building2 className="size-5" />
-          Organization Management
+          <UserCog className="size-5" />
+          Organization Admin Roles
         </CardTitle>
         <CardDescription>
-          Manage organizations that can access the platform
+          Manage admin roles and permissions within your organization
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Add New Organization */}
-        <form onSubmit={handleAddOrganization} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="org-name">Organization Name</Label>
-              <Input
-                id="org-name"
-                placeholder="Stanford University"
-                value={newOrg.name}
-                onChange={(e) => setNewOrg({ ...newOrg, name: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="org-domain">Email Domain</Label>
-              <Input
-                id="org-domain"
-                placeholder="stanford.edu"
-                value={newOrg.domain}
-                onChange={(e) => setNewOrg({ ...newOrg, domain: e.target.value })}
-                required
-              />
-            </div>
-          </div>
+        {/* Add New Organization Admin */}
+        <form onSubmit={handleAddOrgAdmin} className="space-y-4 p-4 border rounded-lg bg-muted/30">
+          <Label className="text-sm font-medium">Add Organization Administrator</Label>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="org-type">Type</Label>
-              <Select
-                value={newOrg.type}
-                onValueChange={(value: 'university' | 'company') =>
-                  setNewOrg({ ...newOrg, type: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="university">University</SelectItem>
-                  <SelectItem value="company">Company</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="max-users">Max Users/Day</Label>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="admin-email" className="text-xs">Email Address</Label>
               <Input
-                id="max-users"
-                placeholder="-1 for unlimited"
-                value={newOrg.maxUsersPerDay}
-                onChange={(e) => setNewOrg({ ...newOrg, maxUsersPerDay: e.target.value })}
+                id="admin-email"
+                type="email"
+                placeholder="admin@yourorg.com"
+                value={newAdmin.email}
+                onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
               />
             </div>
-          </div>
 
-          <Button type="submit" disabled={isLoading} className="w-full">
-            <Plus className="size-4 mr-2" />
-            {isLoading ? 'Adding...' : 'Add Organization'}
-          </Button>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs">Can Manage Users</Label>
+                <Select
+                  value={newAdmin.canManageUsers.toString()}
+                  onValueChange={(value) => setNewAdmin({ ...newAdmin, canManageUsers: value === 'true' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">Yes</SelectItem>
+                    <SelectItem value="false">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Can View Analytics</Label>
+                <Select
+                  value={newAdmin.canViewAnalytics.toString()}
+                  onValueChange={(value) => setNewAdmin({ ...newAdmin, canViewAnalytics: value === 'true' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">Yes</SelectItem>
+                    <SelectItem value="false">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <Button type="submit" disabled={isLoading} size="sm" className="w-full">
+              <Plus className="size-4 mr-2" />
+              {isLoading ? 'Adding...' : 'Add Organization Admin'}
+            </Button>
+          </div>
         </form>
 
-        {/* Organizations List */}
+        {/* Current Organization Admins */}
         <div className="space-y-4">
-          <Label>Active Organizations ({organizations.length})</Label>
-          <div className="space-y-3">
-            {organizations.map((org) => (
+          <Label className="text-sm font-medium">Current Organization Admins ({orgAdmins.length})</Label>
+
+          {isLoadingData ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-sm text-muted-foreground">Loading organization admins...</div>
+            </div>
+          ) : orgAdmins.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p className="text-sm">No organization admins found</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {orgAdmins.map((admin) => (
               <div
-                key={org.id}
+                key={admin.id}
                 className="flex items-center justify-between p-4 border rounded-lg"
               >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-medium">{org.name}</h3>
-                    <span className="text-xs bg-secondary px-2 py-1 rounded">
-                      {org.type}
-                    </span>
-                    {org.isActive ? (
-                      <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 px-2 py-1 rounded">
-                        Active
-                      </span>
-                    ) : (
-                      <span className="text-xs bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 px-2 py-1 rounded">
-                        Inactive
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span>{org.domain}</span>
-                    <span className="flex items-center gap-1">
-                      <Users className="size-3" />
-                      {org.userCount || 0} users
-                    </span>
-                    <span>
-                      Limit: {org.maxUsersPerDay === '-1' ? 'Unlimited' : org.maxUsersPerDay}/day
-                    </span>
+                <div className="flex items-center gap-3">
+                  <Mail className="size-4 text-muted-foreground" />
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{admin.email}</p>
+                      {admin.isCurrentUser && (
+                        <Badge variant="secondary" className="text-xs">You</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>Added: {admin.createdAt}</span>
+                      <span>•</span>
+                      <div className="flex gap-1">
+                        {admin.canManageUsers && (
+                          <Badge variant="outline" className="text-xs">User Management</Badge>
+                        )}
+                        {admin.canViewAnalytics && (
+                          <Badge variant="outline" className="text-xs">Analytics</Badge>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
+
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => toggleOrganization(org.id)}
+                  <Select
+                    value={admin.canManageUsers ? 'manage' : admin.canViewAnalytics ? 'view' : 'none'}
+                    onValueChange={(value) => {
+                      const canManage = value === 'manage';
+                      const canView = value === 'view' || value === 'manage';
+                      handleUpdatePermissions(admin.id, canManage, canView);
+                    }}
                   >
-                    {org.isActive ? 'Deactivate' : 'Activate'}
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    <Settings className="size-4" />
-                  </Button>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manage">Full Access</SelectItem>
+                      <SelectItem value="view">View Only</SelectItem>
+                      <SelectItem value="none">Limited</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {!admin.isCurrentUser && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveOrgAdmin(admin.id, admin.email, admin.isCurrentUser)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Usage Statistics */}
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-primary">
-              {organizations.filter(org => org.isActive).length}
-            </div>
-            <div className="text-sm text-muted-foreground">Active Organizations</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-primary">
-              {organizations.reduce((sum, org) => sum + (org.userCount || 0), 0)}
-            </div>
-            <div className="text-sm text-muted-foreground">Total Users</div>
-          </div>
+        {/* Info */}
+        <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+          <p className="text-xs text-blue-800 dark:text-blue-200">
+            <strong>Organization Admins</strong> can manage users within your organization and access analytics.
+            Platform Admins (defined in code) have full system access including this dashboard.
+          </p>
         </div>
       </CardContent>
     </Card>

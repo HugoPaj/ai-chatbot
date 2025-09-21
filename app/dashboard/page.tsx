@@ -2,11 +2,13 @@ import { auth } from '@/app/(auth)/auth';
 import { redirect } from 'next/navigation';
 import { AdminManagement } from '@/components/admin/admin-management';
 import { OrgManagement } from '@/components/admin/org-management';
-import { DocumentUpload } from '@/components/admin/document-upload';
 import { getUserEntitlements } from '@/lib/ai/user-entitlements';
 import { isAdmin } from '@/lib/auth/admin';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Shield, Users, BarChart3, FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Shield, Users, BarChart3, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+import { getUserCount, getAdminCount, getDailyRequestCount } from '@/lib/db/queries';
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -19,17 +21,31 @@ export default async function DashboardPage() {
   const userIsAdmin = isAdmin(session);
 
   if (userIsAdmin) {
+    // Fetch real data for admin dashboard
+    const [userCount, adminCount, dailyRequests] = await Promise.all([
+      getUserCount(),
+      getAdminCount(),
+      getDailyRequestCount()
+    ]);
     return (
       <div className="container max-w-7xl mx-auto p-6">
         <div className="space-y-6">
-          <div>
-            <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-            <p className="text-muted-foreground">
-              Manage platform settings, users, and knowledge base
-            </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+              <p className="text-muted-foreground">
+                Manage platform settings and user administration
+              </p>
+            </div>
+            <Link href="/">
+              <Button variant="outline" className="flex items-center gap-2">
+                <ArrowLeft className="size-4" />
+                Back to Chat
+              </Button>
+            </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
@@ -38,7 +54,7 @@ export default async function DashboardPage() {
                 <Shield className="size-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">1</div>
+                <div className="text-2xl font-bold">{adminCount}</div>
                 <p className="text-xs text-muted-foreground">
                   Platform administrators
                 </p>
@@ -53,7 +69,7 @@ export default async function DashboardPage() {
                 <Users className="size-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">--</div>
+                <div className="text-2xl font-bold">{userCount}</div>
                 <p className="text-xs text-muted-foreground">
                   Organization members
                 </p>
@@ -68,34 +84,16 @@ export default async function DashboardPage() {
                 <BarChart3 className="size-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">--</div>
+                <div className="text-2xl font-bold">{dailyRequests}</div>
                 <p className="text-xs text-muted-foreground">
                   AI chat requests today
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Documents
-                </CardTitle>
-                <FileText className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">--</div>
-                <p className="text-xs text-muted-foreground">
-                  Knowledge base files
                 </p>
               </CardContent>
             </Card>
           </div>
 
           <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <AdminManagement />
-              <DocumentUpload />
-            </div>
+            <AdminManagement />
             <OrgManagement />
           </div>
         </div>

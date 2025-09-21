@@ -32,10 +32,8 @@ import {
   org,
   type Org,
   orgAdmin,
-  type OrgAdmin,
 } from './schema';
 import type { ArtifactKind } from '@/components/artifact';
-import { generateUUID } from '../utils';
 import { generateHashedPassword } from './utils';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { ChatSDKError } from '../errors';
@@ -680,6 +678,176 @@ export async function incrementDailyUsage({
       'bad_request:database',
       'Failed to increment daily usage',
     );
+  }
+}
+
+// Admin dashboard statistics
+export async function getUserCount(): Promise<number> {
+  try {
+    const result = await db
+      .select({ count: count(user.id) })
+      .from(user)
+      .execute();
+
+    return result[0]?.count ?? 0;
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to get user count');
+  }
+}
+
+export async function getAdminCount(): Promise<number> {
+  try {
+    // Count platform admins from the ADMIN_EMAILS list
+    // Since this is stored in code, we'll return a static count for now
+    // In a real implementation, you might want to store admin status in the database
+    const result = await db
+      .select({ count: count(user.id) })
+      .from(user)
+      .where(eq(user.email, 'hugo.paja05@gmail.com')) // Your admin email
+      .execute();
+
+    return result[0]?.count ?? 1; // Return at least 1 for the super admin
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to get admin count');
+  }
+}
+
+export async function getDailyRequestCount(): Promise<number> {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+
+    // Sum up all request counts for today
+    const totalResult = await db
+      .select()
+      .from(dailyUsage)
+      .where(eq(dailyUsage.date, today))
+      .execute();
+
+    return totalResult.reduce((sum, usage) => sum + Number.parseInt(usage.requestCount, 10), 0);
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to get daily request count');
+  }
+}
+
+// Organization admin management
+export async function getOrgAdmins(): Promise<(typeof orgAdmin.$inferSelect & { email: string })[]> {
+  try {
+    const result = await db
+      .select({
+        id: orgAdmin.id,
+        userId: orgAdmin.userId,
+        orgId: orgAdmin.orgId,
+        canManageUsers: orgAdmin.canManageUsers,
+        canViewAnalytics: orgAdmin.canViewAnalytics,
+        createdAt: orgAdmin.createdAt,
+        email: user.email,
+      })
+      .from(orgAdmin)
+      .innerJoin(user, eq(orgAdmin.userId, user.id))
+      .execute();
+
+    return result;
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to get organization admins');
+  }
+}
+
+export async function createOrgAdmin({
+  userEmail,
+  canManageUsers,
+  canViewAnalytics,
+}: {
+  userEmail: string;
+  canManageUsers: boolean;
+  canViewAnalytics: boolean;
+}): Promise<void> {
+  try {
+    // First, find or create the user
+    let targetUser = await db
+      .select()
+      .from(user)
+      .where(eq(user.email, userEmail))
+      .limit(1)
+      .execute();
+
+    if (targetUser.length === 0) {
+      // Create the user if they don't exist
+      const newUsers = await db
+        .insert(user)
+        .values({
+          email: userEmail,
+          isVerified: true, // Assume org admins are verified
+        })
+        .returning({ id: user.id })
+        .execute();
+
+      targetUser = [{ id: newUsers[0].id, email: userEmail }] as any;
+    }
+
+    // Get the organization (assuming single org setup)
+    const organizations = await db
+      .select({ id: org.id })
+      .from(org)
+      .limit(1)
+      .execute();
+
+    if (organizations.length === 0) {
+      throw new Error('No organization found');
+    }
+
+    // Create the org admin relationship
+    await db
+      .insert(orgAdmin)
+      .values({
+        userId: targetUser[0].id,
+        orgId: organizations[0].id,
+        canManageUsers,
+        canViewAnalytics,
+      })
+      .execute();
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to create organization admin');
+  }
+}
+
+export async function removeOrgAdmin(orgAdminId: string): Promise<void> {
+  try {
+    await db
+      .delete(orgAdmin)
+      .where(eq(orgAdmin.id, orgAdminId))
+      .execute();
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to remove organization admin');
+  }
+}
+
+export async function updateOrgAdminPermissions({
+  orgAdminId,
+  canManageUsers,
+  canViewAnalytics,
+}: {
+  orgAdminId: string;
+  canManageUsers?: boolean;
+  canViewAnalytics?: boolean;
+}): Promise<void> {
+  try {
+    const updateData: Partial<typeof orgAdmin.$inferInsert> = {};
+
+    if (canManageUsers !== undefined) {
+      updateData.canManageUsers = canManageUsers;
+    }
+
+    if (canViewAnalytics !== undefined) {
+      updateData.canViewAnalytics = canViewAnalytics;
+    }
+
+    await db
+      .update(orgAdmin)
+      .set(updateData)
+      .where(eq(orgAdmin.id, orgAdminId))
+      .execute();
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to update organization admin permissions');
   }
 }
 

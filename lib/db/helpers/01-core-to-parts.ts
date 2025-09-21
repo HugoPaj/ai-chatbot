@@ -10,7 +10,7 @@ import {
 } from '../schema';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { inArray } from 'drizzle-orm';
-import { type UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
 // Note: appendResponseMessages has been removed in AI SDK v5
 
 config({

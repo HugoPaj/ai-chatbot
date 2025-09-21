@@ -447,7 +447,7 @@ export class VectorStore {
           ]);
 
           // Filter client-side
-          if (queryResponse && queryResponse.matches) {
+          if (queryResponse?.matches) {
             queryResponse.matches = queryResponse.matches.filter(
               (match: any) => match.metadata?.filename === filename,
             );
@@ -574,7 +574,7 @@ export class VectorStore {
         ]);
 
         // Filter client-side
-        if (queryResponse && queryResponse.matches) {
+        if (queryResponse?.matches) {
           queryResponse.matches = queryResponse.matches.filter(
             (match: any) => match.metadata?.filename === filename,
           );
