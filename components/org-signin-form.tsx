@@ -5,8 +5,14 @@ import { signIn } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building2, Mail, Lock, AlertCircle } from 'lucide-react';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Mail, Lock, AlertCircle } from 'lucide-react';
 
 interface OrgSignInFormProps {
   redirectUrl?: string;
@@ -24,7 +30,8 @@ export function OrgSignInForm({ redirectUrl }: OrgSignInFormProps) {
     setError('');
 
     // Validate organization email format
-    const domain = email.split('@')[1];
+    const normalizedEmail = email.trim().toLowerCase();
+    const domain = normalizedEmail.split('@')[1];
     if (!domain || !email.includes('@')) {
       setError('Please enter a valid organization email address');
       setIsLoading(false);
@@ -33,7 +40,7 @@ export function OrgSignInForm({ redirectUrl }: OrgSignInFormProps) {
 
     try {
       const result = await signIn('credentials', {
-        email,
+        email: normalizedEmail,
         password,
         redirect: false,
       });
@@ -54,14 +61,10 @@ export function OrgSignInForm({ redirectUrl }: OrgSignInFormProps) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Building2 className="size-8 text-blue-600" />
-            <h1 className="text-2xl font-bold">Organization Access</h1>
-          </div>
-          <CardTitle>Sign in with your organization account</CardTitle>
-          <CardDescription>
-            Access is limited to verified university and company email addresses
+        <CardHeader className="text-center my-4">
+          <CardTitle>Sign in to your organization</CardTitle>
+          <CardDescription className="pt-2">
+            Access is limited to verified email addresses
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -69,12 +72,12 @@ export function OrgSignInForm({ redirectUrl }: OrgSignInFormProps) {
             <div className="space-y-2">
               <Label htmlFor="email" className="flex items-center gap-2">
                 <Mail className="size-4" />
-                Organization Email
+                Email Address
               </Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="your.name@university.edu"
+                placeholder=""
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -91,6 +94,7 @@ export function OrgSignInForm({ redirectUrl }: OrgSignInFormProps) {
                 id="password"
                 type="password"
                 value={password}
+                placeholder=""
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
@@ -104,30 +108,14 @@ export function OrgSignInForm({ redirectUrl }: OrgSignInFormProps) {
               </div>
             )}
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoading}
-            >
+            <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
 
-          <div className="mt-6 pt-6 border-t">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              <h3 className="font-medium mb-2">Verified Organizations Include:</h3>
-              <ul className="space-y-1 text-xs">
-                <li>• University email addresses (.edu)</li>
-                <li>• Verified company domains</li>
-                <li>• Research institution emails</li>
-              </ul>
-            </div>
-          </div>
-
           <div className="mt-4 text-center">
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Access is restricted to users with verified organization accounts.
-              Contact your administrator if you need access.
+              Need an account? Reach out to your IT team for assistance.
             </p>
           </div>
         </CardContent>

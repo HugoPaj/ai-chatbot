@@ -5,7 +5,7 @@ import { removeOrgAdmin, updateOrgAdminPermissions } from '@/lib/db/queries';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await auth();
@@ -14,18 +14,22 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await removeOrgAdmin(params.id);
+    const { id } = await params;
+    await removeOrgAdmin(id);
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error removing org admin:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 },
+    );
   }
 }
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await auth();
@@ -36,8 +40,9 @@ export async function PATCH(
 
     const { canManageUsers, canViewAnalytics } = await request.json();
 
+    const { id } = await params;
     await updateOrgAdminPermissions({
-      orgAdminId: params.id,
+      orgAdminId: id,
       canManageUsers,
       canViewAnalytics,
     });
@@ -45,6 +50,9 @@ export async function PATCH(
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating org admin permissions:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 },
+    );
   }
 }

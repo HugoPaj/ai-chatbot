@@ -9,7 +9,7 @@ const ADMIN_EMAILS = [
   // 'admin@example.com',
   // 'another-admin@example.com',
   'hugo.paja05@gmail.com',
-];
+].map((e) => e.toLowerCase());
 
 /**
  * Check if a user is an admin based on their email
@@ -19,12 +19,12 @@ export function isAdmin(session: Session | null): boolean {
     return false;
   }
 
-  return ADMIN_EMAILS.includes(session.user.email);
+  return ADMIN_EMAILS.includes(session.user.email.toLowerCase());
 }
 
 /**
  * Check if a user email is an admin
  */
 export function isAdminEmail(email: string): boolean {
-  return ADMIN_EMAILS.includes(email);
+  return ADMIN_EMAILS.includes(email.toLowerCase());
 }

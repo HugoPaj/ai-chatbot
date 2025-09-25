@@ -48,7 +48,8 @@ const db = drizzle(client);
 
 export async function getUser(email: string): Promise<Array<User>> {
   try {
-    return await db.select().from(user).where(eq(user.email, email));
+    const normalizedEmail = email.trim().toLowerCase();
+    return await db.select().from(user).where(eq(user.email, normalizedEmail));
   } catch (error) {
     throw new ChatSDKError(
       'bad_request:database',
@@ -61,12 +62,14 @@ export async function createUser(email: string, password: string) {
   const hashedPassword = generateHashedPassword(password);
 
   try {
-    return await db.insert(user).values({ email, password: hashedPassword });
+    const normalizedEmail = email.trim().toLowerCase();
+    return await db
+      .insert(user)
+      .values({ email: normalizedEmail, password: hashedPassword });
   } catch (error) {
     throw new ChatSDKError('bad_request:database', 'Failed to create user');
   }
 }
-
 
 export async function saveChat({
   id,
@@ -723,14 +726,22 @@ export async function getDailyRequestCount(): Promise<number> {
       .where(eq(dailyUsage.date, today))
       .execute();
 
-    return totalResult.reduce((sum, usage) => sum + Number.parseInt(usage.requestCount, 10), 0);
+    return totalResult.reduce(
+      (sum, usage) => sum + Number.parseInt(usage.requestCount, 10),
+      0,
+    );
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to get daily request count');
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get daily request count',
+    );
   }
 }
 
 // Organization admin management
-export async function getOrgAdmins(): Promise<(typeof orgAdmin.$inferSelect & { email: string })[]> {
+export async function getOrgAdmins(): Promise<
+  (typeof orgAdmin.$inferSelect & { email: string })[]
+> {
   try {
     const result = await db
       .select({
@@ -748,7 +759,10 @@ export async function getOrgAdmins(): Promise<(typeof orgAdmin.$inferSelect & { 
 
     return result;
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to get organization admins');
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get organization admins',
+    );
   }
 }
 
@@ -806,18 +820,21 @@ export async function createOrgAdmin({
       })
       .execute();
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to create organization admin');
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to create organization admin',
+    );
   }
 }
 
 export async function removeOrgAdmin(orgAdminId: string): Promise<void> {
   try {
-    await db
-      .delete(orgAdmin)
-      .where(eq(orgAdmin.id, orgAdminId))
-      .execute();
+    await db.delete(orgAdmin).where(eq(orgAdmin.id, orgAdminId)).execute();
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to remove organization admin');
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to remove organization admin',
+    );
   }
 }
 
@@ -847,7 +864,9 @@ export async function updateOrgAdminPermissions({
       .where(eq(orgAdmin.id, orgAdminId))
       .execute();
   } catch (error) {
-    throw new ChatSDKError('bad_request:database', 'Failed to update organization admin permissions');
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to update organization admin permissions',
+    );
   }
 }
-
