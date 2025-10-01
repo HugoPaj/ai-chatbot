@@ -71,6 +71,26 @@ function CitationItem({ citation, isHighlighted }: CitationItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const primaryChunk = citation.chunks[0];
 
+  // Get unique pages from all chunks
+  const uniquePages = Array.from(
+    new Set(citation.chunks.map((c) => c.page).filter(Boolean))
+  ).sort((a, b) => (a ?? 0) - (b ?? 0)) as number[];
+  const pageDisplay = uniquePages.length > 0
+    ? uniquePages.length === 1
+      ? `p.${uniquePages[0]}`
+      : uniquePages.length === 2
+        ? `p.${uniquePages[0]}, ${uniquePages[1]}`
+        : `p.${uniquePages[0]}-${uniquePages[uniquePages.length - 1]}`
+    : null;
+
+  // Handler to open PDF in new tab
+  const handleOpenPDF = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent expanding/collapsing
+    if (primaryChunk.pdfUrl) {
+      window.open(primaryChunk.pdfUrl, '_blank');
+    }
+  };
+
   return (
     <div
       className={cn(
@@ -91,15 +111,38 @@ function CitationItem({ citation, isHighlighted }: CitationItemProps) {
             {citation.number}
           </Badge>
           <div className="flex items-center gap-2 min-w-0">
-            {getFileIcon(primaryChunk.filename)}
+            <button
+              type="button"
+              onClick={handleOpenPDF}
+              disabled={!primaryChunk.pdfUrl}
+              className={cn(
+                "flex-shrink-0",
+                primaryChunk.pdfUrl &&
+                  'cursor-pointer hover:opacity-70 transition-opacity'
+              )}
+              title={primaryChunk.pdfUrl ? 'Open PDF' : 'PDF not available'}
+            >
+              {getFileIcon(primaryChunk.filename)}
+            </button>
             <div className="text-left min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">
-                {extractDisplayName(primaryChunk.filename)}
-              </p>
+              <button
+                type="button"
+                onClick={handleOpenPDF}
+                disabled={!primaryChunk.pdfUrl}
+                className={cn(
+                  'text-left w-full',
+                  primaryChunk.pdfUrl && 'cursor-pointer hover:underline'
+                )}
+                title={primaryChunk.pdfUrl ? 'Open PDF' : undefined}
+              >
+                <p className="text-sm font-medium text-foreground truncate">
+                  {extractDisplayName(primaryChunk.filename)}
+                </p>
+              </button>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                {primaryChunk.page && (
+                {pageDisplay && (
                   <>
-                    <span>p.{primaryChunk.page}</span>
+                    <span>{pageDisplay}</span>
                     {primaryChunk.section && <span>•</span>}
                   </>
                 )}

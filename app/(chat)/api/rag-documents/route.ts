@@ -60,19 +60,15 @@ export async function POST(request: Request) {
     const sanitizedFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
     const tempFilePath = path.join(tempDir, `${fileId}-${sanitizedFileName}`);
 
-    // Only upload images to blob storage (PDFs don't need public URLs)
-    let blob: { url: string } | null = null;
-    if (file.type.startsWith('image/')) {
-      console.log(`[RAG DEBUG] Uploading image to blob storage: ${fileName}`);
-      const blobName = `${fileId}-${fileName}`;
-      blob = await put(blobName, file, {
-        access: 'public',
-        contentType: file.type,
-      });
-      console.log(`[RAG DEBUG] Image uploaded to blob: ${blob.url}`);
-    } else {
-      console.log(`[RAG DEBUG] Skipping blob upload for PDF: ${fileName}`);
-    }
+    // Upload files to R2 storage (both images and PDFs for citation linking)
+    let r2Upload: { url: string } | null = null;
+    const r2Key = `${fileId}-${sanitizedFileName}`;
+    console.log(`[RAG DEBUG] Uploading file to R2 storage: ${fileName}`);
+    r2Upload = await put(r2Key, file, {
+      access: 'public',
+      contentType: file.type,
+    });
+    console.log(`[RAG DEBUG] File uploaded to R2: ${r2Upload.url}`);
 
     // Write the file to disk for processing
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -92,6 +88,7 @@ export async function POST(request: Request) {
         documentChunks = await DocumentProcessor.processPDF(
           tempFilePath,
           contentHash,
+          r2Upload?.url, // Pass PDF R2 URL
         );
       } else if (file.type.startsWith('image/')) {
         console.log(`[RAG DEBUG] Processing uploaded image file: ${file.name}`);
@@ -99,17 +96,17 @@ export async function POST(request: Request) {
           `[RAG DEBUG] File type: ${file.type}, size: ${file.size} bytes`,
         );
 
-        if (!blob) {
-          throw new Error('Image blob upload failed - no blob URL available');
+        if (!r2Upload) {
+          throw new Error('Image R2 upload failed - no R2 URL available');
         }
 
-        console.log(`[RAG DEBUG] Using existing blob URL: ${blob.url}`);
+        console.log(`[RAG DEBUG] Using existing R2 URL: ${r2Upload.url}`);
 
-        // Process the image but skip the blob upload since we already uploaded it
+        // Process the image but skip the R2 upload since we already uploaded it
         const singleChunk = await DocumentProcessor.processImageWithUrl(
           tempFilePath,
           contentHash,
-          blob.url, // Pass the existing blob URL
+          r2Upload.url, // Pass the existing R2 URL
         );
 
         documentChunks = [singleChunk];
@@ -181,7 +178,7 @@ export async function POST(request: Request) {
     return Response.json({
       success: true,
       message: 'Document successfully uploaded and processed',
-      url: blob?.url || null, // Only include URL for images
+      url: r2Upload?.url || null, // R2 URL for the uploaded file
       filename: file.name,
       chunks: documentChunks.length,
       type: file.type,

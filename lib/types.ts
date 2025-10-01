@@ -31,6 +31,7 @@ export interface DocumentChunk {
     imageData?: string; // Base64 encoded image data for embedding
     tableStructure?: TableStructure;
     originalImagePath?: string; // For image files uploaded directly
+    pdfUrl?: string; // R2 URL for the source PDF document
   };
 }
 
@@ -66,6 +67,7 @@ export interface CitationChunk {
   score: number;
   coordinates?: Coordinates;
   imageUrl?: string;
+  pdfUrl?: string; // R2 URL for the source PDF document
 }
 
 export interface Citation {

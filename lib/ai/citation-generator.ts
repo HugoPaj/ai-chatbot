@@ -18,7 +18,7 @@ export function generateCitations(
   const {
     maxCitations = 30,
     minScore = 0.375,
-    groupBySource = true,
+    groupBySource = false, // Changed to false for granular, precise citations
     includeContext = true,
   } = options;
 
@@ -69,6 +69,7 @@ export function generateCitations(
         score: result.score,
         coordinates: result.metadata.coordinates,
         imageUrl: result.metadata.imageUrl,
+        pdfUrl: result.metadata.pdfUrl, // Include PDF URL
       }));
 
       // Use the highest-scoring chunk's content as the primary source text
@@ -121,6 +122,7 @@ export function generateCitations(
         score: result.score,
         coordinates: result.metadata.coordinates,
         imageUrl: result.metadata.imageUrl,
+        pdfUrl: result.metadata.pdfUrl, // Pass PDF URL to citation
       };
 
       let sourceText = result.metadata.content;
@@ -155,21 +157,29 @@ export function enhancePromptWithCitations(
 
   const citationInstructions = `
 
-IMPORTANT: When referencing information from the provided documents, you MUST include inline citations using the format [X] where X is the citation number. The available citations are:
+CRITICAL: You MUST use precise inline citations [X] immediately after EVERY statement derived from the documents. Each citation number corresponds to a SPECIFIC piece of information.
+
+Available citations (use the EXACT number that matches the content you're referencing):
 
 ${citations
   .map(
     (citation) =>
-      `[${citation.number}] ${citation.chunks[0].filename}${citation.chunks[0].page ? ` (Page ${citation.chunks[0].page})` : ''}: "${citation.sourceText}"`,
+      `[${citation.number}] ${citation.chunks[0].filename}${citation.chunks[0].page ? ` (p.${citation.chunks[0].page})` : ''}: "${citation.sourceText}"`,
   )
   .join('\n')}
 
-Guidelines for citations:
-- Use citations immediately after making a claim that references document content
-- For example: "The system supports multiple databases [1]" or "The API returns JSON responses [2]"
-- Multiple citations can be used: "This feature is documented in several sources [1][3]"
-- Always cite specific facts, numbers, procedures, or claims from the documents
-- Do not cite for general knowledge or your own reasoning`;
+Citation Rules (STRICTLY FOLLOW):
+1. Match content to citations: If you use information from citation [3], cite [3] - NOT [1] or any other number
+2. Cite immediately after the claim: "The Reynolds number is critical [7]" not "The Reynolds number is critical. [7]"
+3. Each distinct fact needs its own citation: Don't reuse [1] for everything - find the matching citation number
+4. If information appears in multiple citations, cite the most relevant one
+5. NEVER cite [1] by default - only use [1] if the information actually comes from citation [1]
+
+Example - CORRECT:
+"The pressure drop is calculated using equation X [5]. The flow rate depends on viscosity [12]. Temperature affects both parameters [3][12]."
+
+Example - WRONG:
+"The pressure drop is calculated using equation X [1]. The flow rate depends on viscosity [1]. Temperature affects both parameters [1]." (Don't reuse same citation)`;
 
   return systemPrompt + citationInstructions;
 }

@@ -255,6 +255,9 @@ export class VectorStore {
           if (doc.metadata.originalImagePath) {
             baseMetadata.originalImagePath = doc.metadata.originalImagePath;
           }
+          if (doc.metadata.pdfUrl) {
+            baseMetadata.pdfUrl = doc.metadata.pdfUrl;
+          }
 
           vectors.push({
             id, // Use the consistent document ID

@@ -126,6 +126,7 @@ const isDoclingServiceAvailable = async (): Promise<boolean> => {
 const processWithDocling = async (
   filePath: string,
   contentHash?: string,
+  pdfUrl?: string,
 ): Promise<DocumentChunk[]> => {
   try {
     console.log(
@@ -332,6 +333,7 @@ const processWithDocling = async (
             tableStructure,
             imageData: chunk.image_data,
             imageUrl,
+            pdfUrl, // Add PDF R2 URL to metadata
           },
         };
       }),
@@ -349,9 +351,11 @@ export const DocumentProcessor = {
   processPDF: async (
     filePath: string,
     contentHash?: string,
+    pdfUrl?: string,
   ): Promise<DocumentChunk[]> => {
     try {
       console.log(`    📖 Processing document: ${filePath}`);
+      console.log(`    🔗 PDF URL provided: ${pdfUrl || 'NONE'}`);
 
       // Check if file exists before attempting to read it
       if (!fs.existsSync(filePath)) {
@@ -363,7 +367,7 @@ export const DocumentProcessor = {
 
       if (doclingAvailable) {
         try {
-          return await processWithDocling(filePath, contentHash);
+          return await processWithDocling(filePath, contentHash, pdfUrl);
         } catch (doclingError) {
           console.warn(
             `    ⚠️  Docling processing failed, falling back to basic PDF processing`,
@@ -435,6 +439,7 @@ export const DocumentProcessor = {
               filename,
               contentHash: contentHash || '',
               contentType: 'text',
+              pdfUrl, // Add PDF URL to fallback processing
             },
           };
         });

@@ -8,7 +8,9 @@
       "WebSearch",
       "Bash(pnpm add:*)",
       "Bash(npx pnpm run:*)",
-      "WebFetch(domain:ai-sdk.dev)"
+      "WebFetch(domain:ai-sdk.dev)",
+      "Bash(npx tsc:*)",
+      "Bash(pnpm lint:*)"
     ],
     "deny": []
   }

@@ -356,7 +356,7 @@ export async function POST(request: Request) {
             citations = generateCitations(similarDocs, {
               maxCitations: 30,
               minScore: 0.3,
-              groupBySource: true,
+              groupBySource: false, // Use individual citations for precise referencing
             });
 
             console.log(`[Citations] Generated ${citations.length} citations`);

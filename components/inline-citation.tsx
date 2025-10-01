@@ -37,14 +37,19 @@ const truncateText = (text: string, maxLength = 120) => {
 export function InlineCitation({ citation, onCitationClick, className }: InlineCitationProps) {
   const [isClicked, setIsClicked] = useState(false);
 
+  // Get the most relevant chunk (highest score)
+  const primaryChunk = citation.chunks[0];
+
   const handleClick = () => {
     setIsClicked(true);
     setTimeout(() => setIsClicked(false), 200); // Quick flash effect
     onCitationClick?.(citation);
-  };
 
-  // Get the most relevant chunk (highest score)
-  const primaryChunk = citation.chunks[0];
+    // Open PDF if available
+    if (primaryChunk.pdfUrl) {
+      window.open(primaryChunk.pdfUrl, '_blank');
+    }
+  };
 
   return (
     <Tooltip>
@@ -105,9 +110,22 @@ export function InlineCitation({ citation, onCitationClick, className }: InlineC
               </p>
             )}
 
-            <p className="text-xs text-muted-foreground/70 mt-1">
-              Click to view full source
-            </p>
+            {primaryChunk.pdfUrl ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(primaryChunk.pdfUrl, '_blank');
+                }}
+                className="w-full mt-2 px-2 py-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors border border-blue-200 dark:border-blue-800"
+              >
+                Click to view full source →
+              </button>
+            ) : (
+              <p className="text-xs text-muted-foreground/70 mt-2 italic">
+                Re-upload document to enable PDF links
+              </p>
+            )}
           </div>
         </Card>
       </TooltipContent>
