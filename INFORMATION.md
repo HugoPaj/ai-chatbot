@@ -842,4 +842,54 @@ cat lib/ai/entitlements.ts
 npx tsx scripts/test-model-validation.ts
 ```
 
-This multi-model system provides a robust, scalable foundation for serving different AI models to different user tiers while maintaining security and providing seamless fallback mechanisms.
+## 🐳 Docker Build Guide - Docling Service
+
+### Known Issue: BuildKit "invalid file request" Error
+
+**Problem**: Docker BuildKit v0.27+ on Windows fails with:
+```
+ERROR: failed to solve: invalid file request requirements.txt
+```
+
+**Root Cause**: BuildKit bug when handling certain file patterns on Windows filesystem.
+
+### Workaround (REQUIRED)
+
+The `docling-service/Dockerfile` uses `requirements-copy.txt` instead of `requirements.txt` to bypass the BuildKit bug.
+
+**Files in docling-service directory:**
+- `requirements.txt` - Original requirements file (keep this)
+- `requirements-copy.txt` - Copy used by Docker build (workaround)
+
+**Important**: When updating Python dependencies:
+1. Edit `requirements.txt` with your changes
+2. Copy it to `requirements-copy.txt`:
+   ```bash
+   cp docling-service/requirements.txt docling-service/requirements-copy.txt
+   ```
+3. Build the Docker image
+
+### Building the Docling Service
+
+```bash
+# From project root
+docker compose build docling-service
+
+# Or from docling-service directory
+docker build -t docling-service .
+```
+
+### Running the Service
+
+```bash
+# Start the service
+docker compose up docling-service -d
+
+# Check status
+docker compose ps
+
+# View logs
+docker compose logs -f docling-service
+```
+
+Service runs on port 8001 by default (configurable in `docker-compose.yml`).

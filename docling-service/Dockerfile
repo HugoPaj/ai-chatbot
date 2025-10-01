@@ -22,11 +22,11 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Copy requirements and main application files explicitly
-COPY requirements-copy.txt requirements.txt
+COPY requirements-copy.txt .
 COPY main.py .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-copy.txt
 
 # Expose port
 EXPOSE 8080

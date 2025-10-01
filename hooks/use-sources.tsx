@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import type { Citation } from '@/lib/types';
 
 interface UseSourcesParams {
   chatId: string;
 }
 
-// Global storage for sources per chat
+// Global storage for sources and citations per chat
 const globalSources: Record<string, string[]> = {};
+const globalCitations: Record<string, Citation[]> = {};
 
 // Function to set sources globally (called from API or other places)
 export function setGlobalSources(chatId: string, sources: string[]) {
@@ -18,9 +20,21 @@ export function setGlobalSources(chatId: string, sources: string[]) {
   );
 }
 
+// Function to set citations globally
+export function setGlobalCitations(chatId: string, citations: Citation[]) {
+  globalCitations[chatId] = citations;
+  // Trigger a custom event to notify hooks
+  window.dispatchEvent(
+    new CustomEvent('citationsUpdated', { detail: { chatId, citations } }),
+  );
+}
+
 export function useSources({ chatId }: UseSourcesParams) {
   const [sources, setSources] = useState<string[]>(
     () => globalSources[chatId] || [],
+  );
+  const [citations, setCitations] = useState<Citation[]>(
+    () => globalCitations[chatId] || [],
   );
 
   useEffect(() => {
@@ -30,20 +44,37 @@ export function useSources({ chatId }: UseSourcesParams) {
       }
     };
 
+    const handleCitationsUpdate = (event: CustomEvent) => {
+      if (event.detail.chatId === chatId) {
+        setCitations(event.detail.citations);
+      }
+    };
+
     window.addEventListener(
       'sourcesUpdated',
       handleSourcesUpdate as EventListener,
     );
+    window.addEventListener(
+      'citationsUpdated',
+      handleCitationsUpdate as EventListener,
+    );
 
-    // Also check for any existing sources
+    // Also check for any existing sources and citations
     if (globalSources[chatId]) {
       setSources(globalSources[chatId]);
+    }
+    if (globalCitations[chatId]) {
+      setCitations(globalCitations[chatId]);
     }
 
     return () => {
       window.removeEventListener(
         'sourcesUpdated',
         handleSourcesUpdate as EventListener,
+      );
+      window.removeEventListener(
+        'citationsUpdated',
+        handleCitationsUpdate as EventListener,
       );
     };
   }, [chatId]);
@@ -58,6 +89,15 @@ export function useSources({ chatId }: UseSourcesParams) {
       ) {
         setGlobalSources(chatId, dataPart.data.sources);
       }
+
+      // Handle citations data from AI SDK v5 streaming
+      if (
+        dataPart?.type === 'data-citations' &&
+        dataPart?.data?.type === 'citations' &&
+        Array.isArray(dataPart.data.citations)
+      ) {
+        setGlobalCitations(chatId, dataPart.data.citations);
+      }
     },
     [chatId],
   );
@@ -66,14 +106,31 @@ export function useSources({ chatId }: UseSourcesParams) {
     return sources;
   };
 
+  const getCitationsForMessage = (messageId?: string): Citation[] => {
+    return citations;
+  };
+
   const clearSources = () => {
     setGlobalSources(chatId, []);
   };
 
+  const clearCitations = () => {
+    setGlobalCitations(chatId, []);
+  };
+
+  const clearAll = () => {
+    clearSources();
+    clearCitations();
+  };
+
   return {
     sources,
+    citations,
     getSourcesForMessage,
+    getCitationsForMessage,
     clearSources,
+    clearCitations,
+    clearAll,
     handleSourceData,
   };
 }

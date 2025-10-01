@@ -5,10 +5,11 @@ import cx from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';
 import { memo, useState } from 'react';
 import type { Vote } from '@/lib/db/schema';
-import type { Attachment } from '@/lib/types';
+import type { Attachment, Citation } from '@/lib/types';
 import { DocumentToolCall, DocumentToolResult } from './document';
 import { PencilEditIcon, SparklesIcon } from './icons';
 import { Markdown } from './markdown';
+import { MarkdownWithCitations } from './markdown-with-citations';
 import { MessageActions } from './message-actions';
 import { PreviewAttachment } from './preview-attachment';
 import { Weather } from './weather';
@@ -20,6 +21,7 @@ import { MessageEditor } from './message-editor';
 import { DocumentPreview } from './document-preview';
 import { MessageReasoning } from './message-reasoning';
 import { SourcesDisplay } from './sources-display';
+import { CitationsDisplay } from './citations-display';
 import { useSources } from '@/hooks/use-sources';
 import { ImageGeneration } from './image-generation';
 import { ToolCallIndicator } from './tool-call-indicator';
@@ -46,7 +48,14 @@ const PurePreviewMessage = ({
   requiresScrollPadding: boolean;
 }) => {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
-  const { sources } = useSources({ chatId });
+  const [highlightedCitationId, setHighlightedCitationId] = useState<string | undefined>();
+  const { sources, citations } = useSources({ chatId });
+
+  const handleCitationClick = (citation: Citation) => {
+    setHighlightedCitationId(citation.id);
+    // Clear highlight after 3 seconds
+    setTimeout(() => setHighlightedCitationId(undefined), 3000);
+  };
 
   /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
   return (
@@ -140,7 +149,16 @@ const PurePreviewMessage = ({
                             message.role === 'user',
                         })}
                       >
-                        <Markdown>{sanitizeText(part.text)}</Markdown>
+                        {message.role === 'assistant' && citations.length > 0 ? (
+                          <MarkdownWithCitations
+                            citations={citations}
+                            onCitationClick={handleCitationClick}
+                          >
+                            {sanitizeText(part.text)}
+                          </MarkdownWithCitations>
+                        ) : (
+                          <Markdown>{sanitizeText(part.text)}</Markdown>
+                        )}
                       </div>
                     </div>
                   );
@@ -277,9 +295,19 @@ const PurePreviewMessage = ({
               }
             })}
 
-            {message.role === 'assistant' &&
-              sources.length > 0 &&
-              !isLoading && <SourcesDisplay sources={sources} />}
+            {message.role === 'assistant' && !isLoading && (
+              <>
+                {citations.length > 0 && (
+                  <CitationsDisplay
+                    citations={citations}
+                    highlightedCitationId={highlightedCitationId}
+                  />
+                )}
+                {sources.length > 0 && citations.length === 0 && (
+                  <SourcesDisplay sources={sources} />
+                )}
+              </>
+            )}
 
             {!isReadonly && (
               <MessageActions

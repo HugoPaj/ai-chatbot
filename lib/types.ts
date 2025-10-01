@@ -56,9 +56,34 @@ export interface SearchResult {
   };
 }
 
+export interface CitationChunk {
+  id: string;
+  content: string;
+  source: string;
+  filename: string;
+  page?: number;
+  section?: string;
+  score: number;
+  coordinates?: Coordinates;
+  imageUrl?: string;
+}
+
+export interface Citation {
+  id: string;
+  number: number;
+  chunks: CitationChunk[];
+  sourceText: string;
+}
+
+export interface CitationMetadata {
+  citations: Citation[];
+  sources: string[];
+}
+
 export interface ChatResponse {
   response: string;
   sources: string[];
+  citations?: Citation[];
 }
 
 // Local UI attachment type (AI SDK v5 removed Attachment export)

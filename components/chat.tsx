@@ -20,7 +20,7 @@ import type { Session } from 'next-auth';
 import { useSearchParams } from 'next/navigation';
 import { useChatVisibility } from '@/hooks/use-chat-visibility';
 import { useAutoResume } from '@/hooks/use-auto-resume';
-import { useSources, setGlobalSources } from '@/hooks/use-sources';
+import { useSources, setGlobalSources, setGlobalCitations } from '@/hooks/use-sources';
 import { ChatSDKError } from '@/lib/errors';
 import { usePerformanceMonitor } from '@/lib/performance-monitor';
 
@@ -84,6 +84,9 @@ export function Chat({
                     const data = JSON.parse(line.slice(6));
                     if (data.type === 'data-sources' && data.data?.sources) {
                       setGlobalSources(id, data.data.sources);
+                    }
+                    if (data.type === 'data-citations' && data.data?.citations) {
+                      setGlobalCitations(id, data.data.citations);
                     }
                   } catch (e) {
                     // Ignore parsing errors

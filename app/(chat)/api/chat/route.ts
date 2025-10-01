@@ -14,6 +14,10 @@ import {
   systemPrompt,
   formatDocumentContext,
 } from '@/lib/ai/prompts';
+import {
+  generateCitations,
+  enhancePromptWithCitations,
+} from '@/lib/ai/citation-generator';
 import { VectorStore } from '@/lib/ai/vectorStore';
 import {
   createStreamId,
@@ -209,6 +213,7 @@ export async function POST(request: Request) {
         // Start streaming immediately while preparing context in background
         let documentContext = '';
         let documentSources: string[] = [];
+        let citations: any[] = [];
 
         // Extract user message text for async processing
         const userMessageText =
@@ -347,6 +352,15 @@ export async function POST(request: Request) {
               );
             }
 
+            // Generate citations from search results
+            citations = generateCitations(similarDocs, {
+              maxCitations: 30,
+              minScore: 0.3,
+              groupBySource: true,
+            });
+
+            console.log(`[Citations] Generated ${citations.length} citations`);
+
             // Create context from retrieved documents
             documentContext = formatDocumentContext(similarDocs);
 
@@ -401,6 +415,14 @@ export async function POST(request: Request) {
           enhancedSystemPrompt += `\n\nRelevant engineering documents for reference:\n${documentContext}`;
         }
 
+        // Enhance prompt with citation instructions if we have citations
+        if (citations.length > 0) {
+          enhancedSystemPrompt = enhancePromptWithCitations(
+            enhancedSystemPrompt,
+            citations,
+          );
+        }
+
         // Decide whether to use a vision-capable model based on attachments
         /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
         const hasImageAttachment = Boolean(
@@ -427,6 +449,8 @@ export async function POST(request: Request) {
             },
           });
         }
+
+        // Citations will be sent after the response is complete
 
         const result = streamText({
           model: myProvider.languageModel(resolvedModelId),
@@ -558,6 +582,22 @@ export async function POST(request: Request) {
                 } catch (error) {
                   console.error('Failed to save assistant message:', error);
                 }
+              });
+            }
+
+            // Send citations data after the response is complete
+            if (citations.length > 0) {
+              console.log(
+                '[DEBUG] Sending citations data after response:',
+                citations.length,
+                'citations',
+              );
+              writer.write({
+                type: 'data-citations',
+                data: {
+                  type: 'citations',
+                  citations: citations,
+                },
               });
             }
           },

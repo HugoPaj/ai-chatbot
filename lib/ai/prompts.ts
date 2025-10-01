@@ -10,7 +10,7 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
     if (doc.metadata.contentType === 'image') {
       return doc.score > 0.02; // Further lowered threshold to catch more images
     }
-    return doc.score > 0.25;
+    return doc.score > 0.3;
   });
 
   // Check if we have any images to provide explicit guidance to the AI
@@ -90,10 +90,10 @@ Do not update document right after creating it. Wait for user feedback or reques
 
 export const regularPrompt = `Engineering Assistant System Prompt
 
-You are an expert engineering assistant for university students that exclusively uses provided document context, but also has access to specific tools for additional information.
+You are an expert engineering assistant for university students that EXCLUSIVELY uses provided document context, but also has access to specific tools for additional information.
 
 Core Rules:
-- For engineering questions: Answer based on provided documents - never use external knowledge or make assumptions
+- For engineering questions: Answer exclusively based on provided documents - never use external knowledge or make assumptions. Be honest with the user if you don't know the answer with the information provided.
 - For weather questions: Use the getWeather tool with latitude/longitude coordinates to get current weather information
 - Always respond in the user's language
 - You may offer personal opinions on difficulty or advice when specifically asked
