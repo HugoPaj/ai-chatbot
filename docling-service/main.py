@@ -159,6 +159,10 @@ def clean_text_content(text: str) -> str:
     # Remove problematic characters that can break JSON serialization
     import re
 
+    # CRITICAL: Remove unpaired Unicode surrogates (D800-DFFF range)
+    # These break JSON encoding and cause "no low surrogate" errors
+    text = re.sub(r'[\uD800-\uDFFF]', '', text)
+
     # Remove docling-generated HTML comments that clutter the output
     text = re.sub(r'<!--\s*image\s*-->', '[Image]', text)
     text = re.sub(r'<!--\s*formula-not-decoded\s*-->', '[Formula]', text)
@@ -169,7 +173,7 @@ def clean_text_content(text: str) -> str:
 
     # Remove problematic Unicode characters that cause API issues
     text = re.sub(r'[\uE000-\uF8FF]', '', text)  # Private Use Area
-    text = re.sub(r'[\uF000-\uFFFF]', '', text)  # More private use characters
+    text = re.sub(r'[\uFFF0-\uFFFF]', '', text)  # Specials
 
     # Replace problematic Unicode with ASCII alternatives
     unicode_replacements = {
@@ -202,8 +206,12 @@ def clean_text_content(text: str) -> str:
     text = re.sub(r' +\n', '\n', text)  # Remove spaces at end of lines
     text = re.sub(r'\n{3,}', '\n\n', text)  # Max 2 consecutive line breaks
 
-    # Ensure the text is valid UTF-8 and safe for JSON
-    text = text.encode('utf-8', 'ignore').decode('utf-8')
+    # Final safety: Ensure valid UTF-8 and remove any remaining problematic characters
+    # Use 'replace' instead of 'ignore' to handle edge cases
+    text = text.encode('utf-8', 'replace').decode('utf-8', 'replace')
+
+    # Remove replacement character if it was inserted
+    text = text.replace('\ufffd', '')
 
     return text
 
