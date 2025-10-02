@@ -8,6 +8,9 @@ services:
     environment:
       - PORT=8001
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - POSTGRES_URL=${POSTGRES_URL}
+      - DATABASE_URL=${POSTGRES_URL}  # Use POSTGRES_URL for DATABASE_URL
+      - VERCEL_API_URL=${VERCEL_API_URL:-http://host.docker.internal:3000}
     volumes:
       - ./docling-service:/app
     restart: unless-stopped

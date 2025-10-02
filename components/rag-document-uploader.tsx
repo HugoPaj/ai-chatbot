@@ -5,9 +5,10 @@ import { toast } from '@/components/toast';
 
 interface UploadStatus {
   file: File;
-  status: 'pending' | 'uploading' | 'success' | 'error';
+  status: 'pending' | 'uploading' | 'processing' | 'success' | 'error';
   message?: string;
   chunks?: number;
+  progress?: number; // 0-100 for processing progress
 }
 
 export function RagDocumentUploader() {
@@ -33,10 +34,20 @@ export function RagDocumentUploader() {
 
   const uploadSingleFile = async (
     file: File,
+    fileIndex: number,
   ): Promise<{ success: boolean; message: string; chunks?: number }> => {
     try {
       const formData = new FormData();
       formData.append('file', file);
+
+      // Update to uploading state
+      setUploadStatuses((prev) =>
+        prev.map((status, index) =>
+          index === fileIndex
+            ? { ...status, status: 'uploading', message: 'Uploading file...', progress: 0 }
+            : status,
+        ),
+      );
 
       const response = await fetch('/api/rag-documents', {
         method: 'POST',
@@ -48,12 +59,65 @@ export function RagDocumentUploader() {
         throw new Error(error.message || 'Failed to upload document');
       }
 
-      const result = await response.json();
-      return {
-        success: true,
-        message: `Successfully processed with ${result.chunks} chunks`,
-        chunks: result.chunks,
-      };
+      const uploadResult = await response.json();
+
+      // Check if it's a duplicate
+      if (uploadResult.error === 'duplicate') {
+        return {
+          success: false,
+          message: uploadResult.message || 'Duplicate document detected',
+        };
+      }
+
+      const jobId = uploadResult.job_id;
+
+      // Poll for job completion
+      const pollInterval = 2000; // Poll every 2 seconds
+      const maxWaitTime = 600000; // Max 10 minutes
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitTime) {
+        const statusResponse = await fetch(
+          `/api/rag-documents/status/${jobId}`,
+        );
+
+        if (!statusResponse.ok) {
+          throw new Error('Failed to check processing status');
+        }
+
+        const status = await statusResponse.json();
+
+        // Update progress
+        setUploadStatuses((prev) =>
+          prev.map((s, index) =>
+            index === fileIndex
+              ? {
+                  ...s,
+                  status: 'processing',
+                  message: status.message || 'Processing...',
+                  progress: status.progress || 0,
+                }
+              : s,
+          ),
+        );
+
+        if (status.status === 'completed') {
+          return {
+            success: true,
+            message: `Successfully processed with ${status.result?.chunks || 0} chunks`,
+            chunks: status.result?.chunks || 0,
+          };
+        }
+
+        if (status.status === 'failed') {
+          throw new Error(status.error || 'Processing failed');
+        }
+
+        // Wait before next poll
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      }
+
+      throw new Error('Processing timeout - job took too long');
     } catch (error) {
       console.error('Error uploading document:', error);
       return {
@@ -103,14 +167,7 @@ export function RagDocumentUploader() {
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
 
-      // Update status to uploading
-      setUploadStatuses((prev) =>
-        prev.map((status, index) =>
-          index === i ? { ...status, status: 'uploading' } : status,
-        ),
-      );
-
-      const result = await uploadSingleFile(file);
+      const result = await uploadSingleFile(file, i);
 
       const newStatus: UploadStatus = {
         file,
@@ -237,6 +294,9 @@ export function RagDocumentUploader() {
                   {status.status === 'uploading' && (
                     <div className="size-3 rounded-full bg-blue-500 animate-pulse" />
                   )}
+                  {status.status === 'processing' && (
+                    <div className="size-3 rounded-full bg-purple-500 animate-spin border-2 border-current border-t-transparent" />
+                  )}
                   {status.status === 'success' && (
                     <CheckCircle className="size-3 text-green-500" />
                   )}
@@ -245,7 +305,14 @@ export function RagDocumentUploader() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="truncate font-medium">{status.file.name}</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="truncate font-medium">{status.file.name}</div>
+                    {status.status === 'processing' && status.progress && (
+                      <div className="text-xs text-muted-foreground shrink-0">
+                        {status.progress}%
+                      </div>
+                    )}
+                  </div>
                   {status.message && (
                     <div
                       className={`text-xs ${
@@ -257,6 +324,15 @@ export function RagDocumentUploader() {
                       }`}
                     >
                       {status.message}
+                    </div>
+                  )}
+                  {/* Progress bar for processing */}
+                  {status.status === 'processing' && status.progress && (
+                    <div className="mt-1 w-full bg-gray-200 rounded-full h-1">
+                      <div
+                        className="bg-purple-500 h-1 rounded-full transition-all duration-300"
+                        style={{ width: `${status.progress}%` }}
+                      />
                     </div>
                   )}
                 </div>

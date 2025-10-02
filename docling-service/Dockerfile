@@ -31,6 +31,7 @@ RUN pip install --upgrade pip && \
 
 # Copy application code
 COPY main.py .
+COPY db_worker.py .
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

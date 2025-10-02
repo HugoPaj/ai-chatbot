@@ -172,6 +172,15 @@ export function DocumentUploadPopup() {
       }
 
       const result = await response.json();
+
+      // Check if it's a duplicate
+      if (result.error === 'duplicate') {
+        return {
+          success: false,
+          message: result.message || 'Duplicate document detected',
+        };
+      }
+
       return {
         success: true,
         message: `Successfully processed with ${result.chunks} chunks`,

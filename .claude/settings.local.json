@@ -10,7 +10,8 @@
       "Bash(npx pnpm run:*)",
       "WebFetch(domain:ai-sdk.dev)",
       "Bash(npx tsc:*)",
-      "Bash(pnpm lint:*)"
+      "Bash(pnpm lint:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   }

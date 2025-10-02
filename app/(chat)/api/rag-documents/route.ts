@@ -1,17 +1,13 @@
 import { auth } from '@/app/(auth)/auth';
-import { VectorStore } from '@/lib/ai/vectorStore';
-import { DocumentProcessor } from '@/lib/ai/documentProcessor';
 import { put } from '@/lib/r2';
 import { ChatSDKError } from '@/lib/errors';
-import path from 'node:path';
-import fs from 'node:fs';
-import os from 'node:os';
 import { generateUUID } from '@/lib/utils';
-import type { DocumentChunk } from '@/lib/types';
 import crypto from 'node:crypto';
+import { db } from '@/lib/db';
+import { documentProcessingJob } from '@/lib/db/schema';
 
-// Set maximum duration for document processing (5 minutes for large documents)
-export const maxDuration = 300;
+// Quick endpoint - just creates job and returns immediately (no timeout issues!)
+export const maxDuration = 30;
 
 // Maximum file size: 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -53,135 +49,78 @@ export async function POST(request: Request) {
       ).toResponse();
     }
 
-    // Create a temporary file for processing
-    const tempDir = os.tmpdir();
     const fileId = generateUUID();
     const fileName = file.name;
     const sanitizedFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
-    const tempFilePath = path.join(tempDir, `${fileId}-${sanitizedFileName}`);
 
-    // Upload files to R2 storage (both images and PDFs for citation linking)
-    let r2Upload: { url: string } | null = null;
-    const r2Key = `${fileId}-${sanitizedFileName}`;
-    console.log(`[RAG DEBUG] Uploading file to R2 storage: ${fileName}`);
-    r2Upload = await put(r2Key, file, {
+    // Upload file to R2 storage for later processing
+    const r2Key = `pending-docs/${fileId}-${sanitizedFileName}`;
+    console.log(`[RAG] Uploading file to R2: ${fileName}`);
+    const r2Upload = await put(r2Key, file, {
       access: 'public',
       contentType: file.type,
     });
-    console.log(`[RAG DEBUG] File uploaded to R2: ${r2Upload.url}`);
-
-    // Write the file to disk for processing
-    const buffer = Buffer.from(await file.arrayBuffer());
-    fs.writeFileSync(tempFilePath, buffer);
+    console.log(`[RAG] File uploaded to R2: ${r2Upload.url}`);
 
     // Calculate content hash for deduplication
+    const buffer = Buffer.from(await file.arrayBuffer());
     const contentHash = crypto
       .createHash('sha256')
       .update(buffer)
       .digest('hex');
 
-    // Process the document based on its type
-    let documentChunks: DocumentChunk[] = [];
+    console.log(`[RAG] Checking for duplicate document...`);
+    console.log(`[RAG] Content hash: ${contentHash.substring(0, 16)}...`);
 
-    try {
-      if (file.type === 'application/pdf') {
-        documentChunks = await DocumentProcessor.processPDF(
-          tempFilePath,
-          contentHash,
-          r2Upload?.url, // Pass PDF R2 URL
-        );
-      } else if (file.type.startsWith('image/')) {
-        console.log(`[RAG DEBUG] Processing uploaded image file: ${file.name}`);
-        console.log(
-          `[RAG DEBUG] File type: ${file.type}, size: ${file.size} bytes`,
-        );
-
-        if (!r2Upload) {
-          throw new Error('Image R2 upload failed - no R2 URL available');
-        }
-
-        console.log(`[RAG DEBUG] Using existing R2 URL: ${r2Upload.url}`);
-
-        // Process the image but skip the R2 upload since we already uploaded it
-        const singleChunk = await DocumentProcessor.processImageWithUrl(
-          tempFilePath,
-          contentHash,
-          r2Upload.url, // Pass the existing R2 URL
-        );
-
-        documentChunks = [singleChunk];
-
-        console.log(`[RAG DEBUG] Final chunk metadata:`, {
-          filename: singleChunk.metadata.filename,
-          contentType: singleChunk.metadata.contentType,
-          relatedImageUrls: singleChunk.metadata.relatedImageUrls,
-          hasImageData: !!singleChunk.metadata.imageData,
-        });
-      }
-    } catch (error) {
-      console.error('Error processing document:', error);
-      return new ChatSDKError(
-        'bad_request:api',
-        'Failed to process document',
-      ).toResponse();
-    } finally {
-      // Clean up the temporary file
-      try {
-        if (fs.existsSync(tempFilePath)) {
-          fs.unlinkSync(tempFilePath);
-          console.log(`Cleaned up temporary file: ${tempFilePath}`);
-        }
-      } catch (error) {
-        console.error('Error deleting temporary file:', error);
-        console.error('Temp file path was:', tempFilePath);
-      }
-    }
-
-    if (documentChunks.length === 0) {
-      return new ChatSDKError(
-        'bad_request:api',
-        'No content could be extracted from the document',
-      ).toResponse();
-    }
-
-    console.log(
-      `[RAG DEBUG] About to store ${documentChunks.length} document chunks`,
-    );
-
-    // Log image chunks specifically
-    const imageChunks = documentChunks.filter(
-      (chunk) => chunk.metadata.contentType === 'image',
-    );
-    if (imageChunks.length > 0) {
-      console.log(
-        `[RAG DEBUG] Found ${imageChunks.length} image chunks to store`,
-      );
-      imageChunks.forEach((chunk, index) => {
-        console.log(`[RAG DEBUG] Image chunk ${index + 1}:`, {
-          filename: chunk.metadata.filename,
-          relatedImageUrls: chunk.metadata.relatedImageUrls,
-          hasImageData: !!chunk.metadata.imageData,
-          imageDataLength: chunk.metadata.imageData?.length || 0,
-        });
-      });
-    }
-
-    // Initialize vector store
+    // Check if document already exists in vector database
+    const { VectorStore } = await import('@/lib/ai/vectorStore');
     const vectorStore = new VectorStore();
     await vectorStore.initialize();
 
-    // Store document chunks in vector database
-    console.log(`[RAG DEBUG] Storing chunks in vector database...`);
-    await vectorStore.storeDocuments(documentChunks);
-    console.log(`[RAG DEBUG] Successfully stored chunks in vector database`);
+    const duplicateCheck = await vectorStore.checkDuplicateDocument(contentHash);
 
+    if (duplicateCheck.exists) {
+      console.log(
+        `[RAG] Duplicate document detected: ${duplicateCheck.filename}`,
+      );
+      return Response.json({
+        success: false,
+        error: 'duplicate',
+        message: `This document already exists in the knowledge base as "${duplicateCheck.filename}". Uploading it again would replace the existing version.`,
+        existingFilename: duplicateCheck.filename,
+        contentHash: contentHash.substring(0, 16),
+      });
+    }
+
+    console.log(`[RAG] No duplicate found, proceeding with upload...`);
+
+    // Create job in database - Cloud Run worker will pick it up and process
+    const [job] = await db
+      .insert(documentProcessingJob)
+      .values({
+        // biome-ignore lint: Forbidden non-null assertion
+        userId: session.user.id!,
+        filename: sanitizedFileName,
+        fileSize: file.size.toString(),
+        fileType: file.type,
+        status: 'queued',
+        progress: '0',
+        message: 'Waiting for processing...',
+        r2Url: r2Upload.url,
+        contentHash,
+      })
+      .returning();
+
+    console.log(`[RAG] Created processing job: ${job.id}`);
+
+    // Return immediately - no timeout!
     return Response.json({
       success: true,
-      message: 'Document successfully uploaded and processed',
-      url: r2Upload?.url || null, // R2 URL for the uploaded file
+      job_id: job.id,
+      status: 'queued',
+      message:
+        'Document uploaded and queued for processing. Poll /api/rag-documents/status/{job_id} for updates.',
       filename: file.name,
-      chunks: documentChunks.length,
-      type: file.type,
     });
   } catch (error) {
     console.error('Error in document upload:', error);

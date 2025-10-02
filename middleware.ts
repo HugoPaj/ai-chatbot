@@ -19,15 +19,25 @@ export async function middleware(request: NextRequest) {
   }
 
   // Allow API key authentication for docling service endpoints
-  if (pathname.startsWith('/api/rag-documents/store-chunks')) {
+  if (pathname.startsWith('/api/rag-documents/process-and-embed')) {
     const apiKey = request.headers.get('x-api-key');
     const expectedApiKey = process.env.DOCLING_API_KEY;
 
+    console.log('[Middleware Debug] RAG document endpoint hit:', pathname);
+    console.log('[Middleware Debug] Has API key header:', !!apiKey);
+    console.log(
+      '[Middleware Debug] Has expected API key env:',
+      !!expectedApiKey,
+    );
+    console.log('[Middleware Debug] Keys match:', apiKey === expectedApiKey);
+
     if (apiKey && expectedApiKey && apiKey === expectedApiKey) {
       // Valid API key, allow the request to proceed
+      console.log('[Middleware Debug] ✅ Allowing request with API key');
       return NextResponse.next();
     }
     // If no valid API key, continue to check for session token below
+    console.log('[Middleware Debug] ⚠️ API key auth failed, checking session');
   }
 
   // Allow unauthenticated access to login page

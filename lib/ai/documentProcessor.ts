@@ -163,18 +163,26 @@ const processWithDocling = async (
   filePath: string,
   contentHash?: string,
   pdfUrl?: string,
+  originalFilename?: string,
 ): Promise<DocumentChunk[]> => {
   try {
     console.log(
-      `    🚀 Processing with Docling service for images, text, and tables...`,
+      `    [DocProcessor] 🚀 Starting Docling service processing...`,
     );
+    console.log(`    [DocProcessor] 📂 File path: ${filePath}`);
+    console.log(`    [DocProcessor] 🔗 PDF URL: ${pdfUrl || 'NONE'}`);
 
     // Read file and create FormData
+    console.log(`    [DocProcessor] 📖 Reading file from disk...`);
     const fileBuffer = await readFile(filePath);
+    console.log(`    [DocProcessor] ✅ File read: ${fileBuffer.length} bytes`);
+
     const formData = new FormData();
 
     // Determine file type based on extension
     const fileExtension = filePath.split('.').pop()?.toLowerCase() || 'pdf';
+    console.log(`    [DocProcessor] 📋 File extension: ${fileExtension}`);
+
     const mimeTypes: Record<string, string> = {
       pdf: 'application/pdf',
       docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -183,40 +191,50 @@ const processWithDocling = async (
     };
 
     const mimeType = mimeTypes[fileExtension] || 'application/pdf';
+    console.log(`    [DocProcessor] 📄 MIME type: ${mimeType}`);
 
     // Convert Buffer to Uint8Array for File constructor
     const fileData = new Uint8Array(fileBuffer);
 
     // Create a File object from buffer
-    const file = new File(
-      [fileData],
-      filePath.split('/').pop() || `document.${fileExtension}`,
-      {
-        type: mimeType,
-      },
-    );
+    const fileName = filePath.split('/').pop() || `document.${fileExtension}`;
+    console.log(`    [DocProcessor] 📦 Creating File object: ${fileName}`);
+
+    const file = new File([fileData], fileName, { type: mimeType });
     formData.append('file', file);
 
+    console.log(`    [DocProcessor] ✅ FormData prepared`);
+
     // Send to Docling service
-    const response = await fetch(`${DOCLING_SERVICE_URL}/process-document`, {
+    const doclingUrl = `${DOCLING_SERVICE_URL}/process-document`;
+    console.log(`    [DocProcessor] 🌐 Sending request to Docling: ${doclingUrl}`);
+
+    const response = await fetch(doclingUrl, {
       method: 'POST',
       body: formData,
     });
 
+    console.log(`    [DocProcessor] 📥 Docling response status: ${response.status}`);
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`    [DocProcessor] ❌ Docling service error: ${response.status}`);
+      console.error(`    [DocProcessor] ❌ Error body: ${errorText.substring(0, 500)}`);
       throw new Error(
         `Docling service error: ${response.status} ${response.statusText}`,
       );
     }
 
+    console.log(`    [DocProcessor] 📦 Parsing Docling response...`);
     const doclingResult: DoclingResponse = await response.json();
 
     if (!doclingResult.success) {
+      console.error(`    [DocProcessor] ❌ Docling processing failed: ${doclingResult.error}`);
       throw new Error(`Docling processing failed: ${doclingResult.error}`);
     }
 
     console.log(
-      `    ✅ Docling processed ${doclingResult.chunks.length} chunks in ${doclingResult.processing_time.toFixed(2)}s`,
+      `    [DocProcessor] ✅ Docling processed ${doclingResult.chunks.length} chunks in ${doclingResult.processing_time.toFixed(2)}s`,
     );
 
     // Log breakdown by content type
@@ -230,15 +248,21 @@ const processWithDocling = async (
       (c) => c.content_type === 'table',
     ).length;
     console.log(
-      `    📊 Content breakdown: ${textChunks} text, ${imageChunks} images, ${tableChunks} tables`,
+      `    [DocProcessor] 📊 Content breakdown: ${textChunks} text, ${imageChunks} images, ${tableChunks} tables`,
     );
 
     // Convert Docling chunks to DocumentChunk format and upload images
-    const filename = cleanFilename(filePath, `unknown.${fileExtension}`);
+    // Use original filename if provided, otherwise clean the file path
+    const filename = originalFilename || cleanFilename(filePath, `unknown.${fileExtension}`);
+    console.log(`    [DocProcessor] 📝 Using filename: ${filename}`);
     const imageUrlsByPageMap = new Map<string, string[]>();
+
+    console.log(`    [DocProcessor] 🔄 Processing ${doclingResult.chunks.length} chunks...`);
 
     const processedChunks: DocumentChunk[] = await Promise.all(
       doclingResult.chunks.map(async (chunk, index) => {
+        console.log(`    [DocProcessor] 📦 Processing chunk ${index + 1}/${doclingResult.chunks.length} (type: ${chunk.content_type})`);
+
         const coordinates: Coordinates | undefined = chunk.coordinates
           ? {
               x: chunk.coordinates.x,
@@ -258,7 +282,10 @@ const processWithDocling = async (
 
         // Upload image chunks to R2 and collect URLs by page
         if (chunk.content_type === 'image' && chunk.image_data) {
+          console.log(`    [DocProcessor] 🖼️  Uploading image chunk ${index + 1} to R2...`);
           const uploadedUrl = await uploadImageToR2(chunk.image_data, index);
+          console.log(`    [DocProcessor] ✅ Image uploaded: ${uploadedUrl.substring(0, 50)}...`);
+
           const pageKey = `${filename}:${chunk.page || 1}`;
 
           const existingUrls = imageUrlsByPageMap.get(pageKey) || [];
@@ -284,7 +311,11 @@ const processWithDocling = async (
       }),
     );
 
+    console.log(`    [DocProcessor] ✅ All ${processedChunks.length} chunks processed`);
+    console.log(`    [DocProcessor] 🖼️  Total image pages: ${imageUrlsByPageMap.size}`);
+
     // Enrich all chunks with related image URLs from the same page
+    console.log(`    [DocProcessor] 🔗 Enriching chunks with related image URLs...`);
     const enrichedChunks = processedChunks.map((chunk) => {
       const pageKey = `${chunk.metadata.filename}:${chunk.metadata.page || 1}`;
       const relatedImageUrls = imageUrlsByPageMap.get(pageKey);
@@ -302,6 +333,7 @@ const processWithDocling = async (
       return chunk;
     });
 
+    console.log(`    [DocProcessor] ✅ Chunks enriched successfully`);
     return enrichedChunks;
   } catch (error) {
     console.error(`    ❌ Docling processing failed:`, error);
@@ -315,31 +347,43 @@ export const DocumentProcessor = {
     filePath: string,
     contentHash?: string,
     pdfUrl?: string,
+    originalFilename?: string,
   ): Promise<DocumentChunk[]> => {
     try {
-      console.log(`    📖 Processing document: ${filePath}`);
-      console.log(`    🔗 PDF URL provided: ${pdfUrl || 'NONE'}`);
+      console.log(`    [DocProcessor] 📖 ========== Starting PDF Processing ==========`);
+      console.log(`    [DocProcessor] 📂 File path: ${filePath}`);
+      console.log(`    [DocProcessor] 📝 Original filename: ${originalFilename || 'extracted from path'}`);
+      console.log(`    [DocProcessor] 🔗 PDF URL: ${pdfUrl || 'NONE'}`);
+      console.log(`    [DocProcessor] #️⃣ Content hash: ${contentHash?.substring(0, 16)}...`);
 
       // Check if file exists before attempting to read it
+      console.log(`    [DocProcessor] 🔍 Checking if file exists...`);
       if (!fs.existsSync(filePath)) {
+        console.error(`    [DocProcessor] ❌ File not found: ${filePath}`);
         throw new Error(`Document file not found: ${filePath}`);
       }
+      console.log(`    [DocProcessor] ✅ File exists`);
 
       // Try enhanced processing with Docling service first
+      console.log(`    [DocProcessor] 🔍 Checking Docling service availability...`);
       const doclingAvailable = await isDoclingServiceAvailable();
+      console.log(`    [DocProcessor] Docling available: ${doclingAvailable}`);
 
       if (doclingAvailable) {
         try {
-          return await processWithDocling(filePath, contentHash, pdfUrl);
+          console.log(`    [DocProcessor] 🚀 Using Docling service for enhanced processing...`);
+          const result = await processWithDocling(filePath, contentHash, pdfUrl, originalFilename);
+          console.log(`    [DocProcessor] ✅ Docling processing completed successfully`);
+          return result;
         } catch (doclingError) {
           console.warn(
-            `    ⚠️  Docling processing failed, falling back to basic PDF processing`,
+            `    [DocProcessor] ⚠️  Docling processing failed, falling back to basic PDF processing`,
           );
-          console.warn(`    Error: ${doclingError}`);
+          console.warn(`    [DocProcessor] ⚠️  Error:`, doclingError);
         }
       } else {
         console.log(
-          `    ℹ️  Docling service not available, using basic PDF processing`,
+          `    [DocProcessor] ℹ️  Docling service not available, using basic PDF processing`,
         );
       }
 

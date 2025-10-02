@@ -238,3 +238,38 @@ export const dailyUsage = pgTable(
 );
 
 export type DailyUsage = InferSelectModel<typeof dailyUsage>;
+
+// Document processing jobs for async RAG document uploads
+export const documentProcessingJob = pgTable('DocumentProcessingJob', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  filename: varchar('filename', { length: 256 }).notNull(),
+  fileSize: varchar('fileSize', { length: 16 }).notNull(), // Store as string to avoid int overflow
+  fileType: varchar('fileType', { length: 64 }).notNull(),
+  status: varchar('status', {
+    enum: ['queued', 'processing', 'completed', 'failed'],
+  })
+    .notNull()
+    .default('queued'),
+  progress: varchar('progress', { length: 8 }).notNull().default('0'), // 0-100
+  message: text('message'),
+  errorMessage: text('errorMessage'),
+  // File storage info
+  r2Url: text('r2Url'), // R2 URL for the uploaded file
+  contentHash: varchar('contentHash', { length: 64 }), // SHA-256 hash
+  // Processing results
+  totalPages: varchar('totalPages', { length: 8 }),
+  chunksCount: varchar('chunksCount', { length: 8 }),
+  processingTimeMs: varchar('processingTimeMs', { length: 16 }),
+  // Timestamps
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+  startedAt: timestamp('startedAt'),
+  completedAt: timestamp('completedAt'),
+});
+
+export type DocumentProcessingJob = InferSelectModel<
+  typeof documentProcessingJob
+>;

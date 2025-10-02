@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Optional
 import logging
 import time
 import httpx
+import asyncio
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -103,6 +104,7 @@ class ProcessingResponse(BaseModel):
     total_pages: int
     processing_time: float
     error: Optional[str] = None
+
 
 @app.get("/")
 async def root():
@@ -424,13 +426,16 @@ async def extract_chunks_from_json(doc_dict: dict, doc: DoclingDocument, filenam
 
         logger.info(f"Created {len(chunks)} text chunks with page numbers preserved")
 
-        # Extract images with page numbers
+        # Extract images with page numbers - PARALLEL PROCESSING
         if hasattr(doc, 'pictures') and doc.pictures:
             logger.info(f"Processing {len(doc.pictures)} images")
+
+            # Prepare all images for parallel processing
+            valid_images = []
+
             for i, picture in enumerate(doc.pictures):
                 try:
                     image_data = extract_image_from_picture(picture)
-
                     if not image_data:
                         continue
 
@@ -444,7 +449,6 @@ async def extract_chunks_from_json(doc_dict: dict, doc: DoclingDocument, filenam
                         continue
 
                     page_no = 1
-
                     # Get page number from provenance in JSON
                     if hasattr(picture, 'prov') and picture.prov:
                         for prov in picture.prov:
@@ -452,28 +456,56 @@ async def extract_chunks_from_json(doc_dict: dict, doc: DoclingDocument, filenam
                                 page_no = prov.page_no
                                 break
 
-                    # Use vision AI to generate detailed description
-                    logger.info(f"Analyzing image {i+1} with vision AI...")
-                    vision_description = await analyze_image_with_vision(image_data, page_no, filename)
-
-                    # Add caption if available
+                    # Get caption if available
                     caption_text = ""
                     if hasattr(picture, 'caption') and picture.caption:
                         caption_text = f" Caption: {picture.caption}"
 
-                    # Combine vision description with metadata
-                    content = f"{vision_description} (Page {page_no} from {filename}){caption_text}"
-
-                    chunks.append(ProcessedChunk(
-                        content=content,
-                        content_type='image',
-                        page=page_no,
-                        coordinates=None,
-                        image_data=image_data
-                    ))
+                    valid_images.append({
+                        'index': i,
+                        'image_data': image_data,
+                        'page_no': page_no,
+                        'caption_text': caption_text
+                    })
 
                 except Exception as e:
-                    logger.warning(f"Failed to process image {i}: {e}")
+                    logger.warning(f"Failed to extract image {i}: {e}")
+
+            # Process all images in parallel (with concurrency limit to avoid rate limits)
+            logger.info(f"Analyzing {len(valid_images)} valid images with vision AI in parallel...")
+
+            async def process_single_image(img_info):
+                try:
+                    vision_description = await analyze_image_with_vision(
+                        img_info['image_data'],
+                        img_info['page_no'],
+                        filename
+                    )
+                    content = f"{vision_description} (Page {img_info['page_no']} from {filename}){img_info['caption_text']}"
+                    return ProcessedChunk(
+                        content=content,
+                        content_type='image',
+                        page=img_info['page_no'],
+                        coordinates=None,
+                        image_data=img_info['image_data']
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to process image {img_info['index']}: {e}")
+                    return None
+
+            # Process images with concurrency limit (10 at a time for faster processing)
+            semaphore = asyncio.Semaphore(10)
+
+            async def process_with_limit(img_info):
+                async with semaphore:
+                    return await process_single_image(img_info)
+
+            image_chunks = await asyncio.gather(*[process_with_limit(img) for img in valid_images])
+
+            # Add successful chunks
+            for chunk in image_chunks:
+                if chunk is not None:
+                    chunks.append(chunk)
 
             logger.info(f"Successfully extracted {len([c for c in chunks if c.content_type == 'image'])} images")
 
@@ -490,6 +522,7 @@ async def extract_chunks_from_json(doc_dict: dict, doc: DoclingDocument, filenam
         raise
 
     return chunks
+
 
 @app.post("/process-document", response_model=ProcessingResponse)
 async def process_document(file: UploadFile = File(..., max_size=MAX_UPLOAD_SIZE)):
@@ -583,6 +616,24 @@ async def process_document(file: UploadFile = File(..., max_size=MAX_UPLOAD_SIZE
                 logger.debug(f"Cleaned up temporary file: {temp_path}")
             except Exception as e:
                 logger.warning(f"Failed to cleanup temp file {temp_path}: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background worker on app startup"""
+    try:
+        from db_worker import start_worker
+        start_worker()
+        logger.info("Application started with database worker")
+    except Exception as e:
+        logger.error(f"Failed to start database worker: {e}")
+        logger.warning("Application will continue without database worker")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop background worker on app shutdown"""
+    from db_worker import stop_worker
+    stop_worker()
+    logger.info("Application shutdown complete")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8001))

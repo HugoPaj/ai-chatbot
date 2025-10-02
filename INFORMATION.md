@@ -982,3 +982,19 @@ docker compose logs -f docling-service
 ```
 
 Service runs on port 8001 by default (configurable in `docker-compose.yml`).
+
+User Upload → /api/rag-documents
+↓
+Check for duplicates (instant)
+↓
+Create job in DB
+↓
+DB Worker picks up job
+↓
+Downloads from R2
+↓
+Calls /api/rag-documents/process-and-embed
+↓
+DocumentProcessor → Docling → Embeddings → VectorStore
+↓
+Job marked complete

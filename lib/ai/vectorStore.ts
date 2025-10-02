@@ -658,4 +658,44 @@ export class VectorStore {
       throw error;
     }
   }
+
+  /**
+   * Check if a document with the given content hash already exists in the database
+   * @param contentHash - The SHA-256 hash of the document content
+   * @returns Promise<{ exists: boolean; filename?: string }> - Whether the document exists and its filename if found
+   */
+  async checkDuplicateDocument(
+    contentHash: string,
+  ): Promise<{ exists: boolean; filename?: string }> {
+    try {
+      console.log(`🔍 Checking for duplicate document with hash: ${contentHash.substring(0, 16)}...`);
+      const index = this.pinecone.index(this.indexName);
+
+      // Create a dummy embedding to query
+      const dummyEmbedding = new Array(1536).fill(0);
+
+      // Query with filter for the specific content hash
+      const queryResponse = await index.query({
+        vector: dummyEmbedding,
+        topK: 1,
+        includeMetadata: true,
+        includeValues: false,
+        filter: {
+          contentHash: { $eq: contentHash },
+        },
+      });
+
+      if (queryResponse.matches && queryResponse.matches.length > 0) {
+        const filename = queryResponse.matches[0].metadata?.filename as string;
+        console.log(`✅ Found existing document with hash ${contentHash.substring(0, 16)}...: ${filename}`);
+        return { exists: true, filename };
+      }
+
+      console.log(`✅ No duplicate found for hash ${contentHash.substring(0, 16)}...`);
+      return { exists: false };
+    } catch (error) {
+      console.error('Error checking for duplicate document:', error);
+      throw error;
+    }
+  }
 }
