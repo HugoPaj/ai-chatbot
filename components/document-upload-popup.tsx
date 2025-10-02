@@ -24,9 +24,11 @@ import {
 
 interface UploadStatus {
   file: File;
-  status: 'pending' | 'uploading' | 'success' | 'error';
+  status: 'pending' | 'uploading' | 'processing' | 'success' | 'error';
   message?: string;
   chunks?: number;
+  progress?: number; // 0-100 for processing progress
+  jobId?: string; // Store job ID for polling
 }
 
 interface StoredFile {
@@ -57,6 +59,68 @@ export function DocumentUploadPopup() {
       loadStoredFiles();
     }
   }, [open]);
+
+  // Poll for job status only when sheet is open
+  useEffect(() => {
+    if (!open) return;
+
+    const processingJobs = uploadStatuses.filter(
+      (status) =>
+        status.jobId &&
+        (status.status === 'uploading' || status.status === 'processing')
+    );
+
+    if (processingJobs.length === 0) return;
+
+    const pollInterval = setInterval(async () => {
+      for (const job of processingJobs) {
+        if (!job.jobId) continue;
+
+        try {
+          const response = await fetch(`/api/rag-documents/status/${job.jobId}`);
+          if (!response.ok) continue;
+
+          const status = await response.json();
+
+          setUploadStatuses((prev) =>
+            prev.map((s) =>
+              s.jobId === job.jobId
+                ? {
+                    ...s,
+                    status: status.status === 'completed' ? 'success' : status.status === 'failed' ? 'error' : 'processing',
+                    message: status.status === 'completed'
+                      ? `Successfully processed with ${status.result?.chunks || 0} chunks`
+                      : status.status === 'failed'
+                      ? status.error || 'Processing failed'
+                      : status.message || 'Processing...',
+                    progress: status.progress || 0,
+                    chunks: status.result?.chunks,
+                  }
+                : s
+            )
+          );
+
+          // Show success toast when completed
+          if (status.status === 'completed') {
+            toast({
+              type: 'success',
+              description: `${job.file.name} processed successfully`,
+            });
+            loadStoredFiles(); // Refresh file list
+          } else if (status.status === 'failed') {
+            toast({
+              type: 'error',
+              description: `${job.file.name} processing failed: ${status.error || 'Unknown error'}`,
+            });
+          }
+        } catch (error) {
+          console.error('Error polling job status:', error);
+        }
+      }
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [open, uploadStatuses]);
 
   const loadStoredFiles = async () => {
     setIsLoadingFiles(true);
@@ -156,10 +220,20 @@ export function DocumentUploadPopup() {
 
   const uploadSingleFile = async (
     file: File,
-  ): Promise<{ success: boolean; message: string; chunks?: number }> => {
+    fileIndex: number,
+  ): Promise<{ success: boolean; message: string; chunks?: number; jobId?: string }> => {
     try {
       const formData = new FormData();
       formData.append('file', file);
+
+      // Update to uploading state
+      setUploadStatuses((prev) =>
+        prev.map((status, index) =>
+          index === fileIndex
+            ? { ...status, status: 'uploading', message: 'Uploading file...', progress: 0 }
+            : status,
+        ),
+      );
 
       const response = await fetch('/api/rag-documents', {
         method: 'POST',
@@ -171,20 +245,38 @@ export function DocumentUploadPopup() {
         throw new Error(error.message || 'Failed to upload document');
       }
 
-      const result = await response.json();
+      const uploadResult = await response.json();
 
       // Check if it's a duplicate
-      if (result.error === 'duplicate') {
+      if (uploadResult.error === 'duplicate') {
         return {
           success: false,
-          message: result.message || 'Duplicate document detected',
+          message: uploadResult.message || 'Duplicate document detected',
         };
       }
 
+      const jobId = uploadResult.job_id;
+
+      // Store job ID and set to processing state
+      // Polling will happen via useEffect when sidebar is open
+      setUploadStatuses((prev) =>
+        prev.map((s, index) =>
+          index === fileIndex
+            ? {
+                ...s,
+                status: 'processing',
+                message: 'Queued for processing...',
+                progress: 0,
+                jobId,
+              }
+            : s,
+        ),
+      );
+
       return {
-        success: true,
-        message: `Successfully processed with ${result.chunks} chunks`,
-        chunks: result.chunks,
+        success: true, // Upload successful, processing will happen async
+        message: 'Upload complete, processing...',
+        jobId,
       };
     } catch (error) {
       console.error('Error uploading document:', error);
@@ -235,46 +327,25 @@ export function DocumentUploadPopup() {
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
 
-      // Update status to uploading
-      setUploadStatuses((prev) =>
-        prev.map((status, index) =>
-          index === i ? { ...status, status: 'uploading' } : status,
-        ),
-      );
-
-      const result = await uploadSingleFile(file);
-
-      const newStatus: UploadStatus = {
-        file,
-        status: result.success ? 'success' : 'error',
-        message: result.message,
-        chunks: result.chunks,
-      };
+      const result = await uploadSingleFile(file, i);
 
       if (result.success) {
         successCount++;
       } else {
         errorCount++;
       }
-
-      results.push(newStatus);
-
-      // Update status with result
-      setUploadStatuses((prev) =>
-        prev.map((status, index) => (index === i ? newStatus : status)),
-      );
     }
 
     // Show final summary toast
     if (successCount > 0 && errorCount === 0) {
       toast({
         type: 'success',
-        description: `Successfully uploaded ${successCount} document${successCount > 1 ? 's' : ''}`,
+        description: `Successfully uploaded ${successCount} document${successCount > 1 ? 's' : ''}. Processing in background...`,
       });
     } else if (successCount > 0 && errorCount > 0) {
       toast({
         type: 'success',
-        description: `${successCount} of ${fileArray.length} documents uploaded successfully`,
+        description: `${successCount} of ${fileArray.length} documents uploaded. Processing in background...`,
       });
     } else {
       toast({
@@ -286,16 +357,6 @@ export function DocumentUploadPopup() {
     setIsUploading(false);
     // Reset the file input
     event.target.value = '';
-
-    // Refresh stored files list if any uploads succeeded
-    if (successCount > 0) {
-      loadStoredFiles();
-    }
-
-    // Clear statuses after a delay to let user see the results
-    setTimeout(() => {
-      setUploadStatuses([]);
-    }, 5000);
   };
 
   return (
@@ -450,6 +511,9 @@ export function DocumentUploadPopup() {
                       {status.status === 'uploading' && (
                         <div className="size-4 rounded-full bg-blue-500 animate-pulse" />
                       )}
+                      {status.status === 'processing' && (
+                        <div className="size-4 rounded-full bg-purple-500 animate-spin border-2 border-current border-t-transparent" />
+                      )}
                       {status.status === 'success' && (
                         <CheckCircle className="size-4 text-green-500" />
                       )}
@@ -458,8 +522,15 @@ export function DocumentUploadPopup() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0 space-y-1">
-                      <div className="text-sm font-medium truncate">
-                        {extractMeaningfulFilename(status.file.name)}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm font-medium truncate">
+                          {extractMeaningfulFilename(status.file.name)}
+                        </div>
+                        {status.status === 'processing' && status.progress !== undefined && (
+                          <div className="text-xs text-muted-foreground shrink-0">
+                            {status.progress}%
+                          </div>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {Math.round(status.file.size / 1024)} KB
@@ -475,6 +546,15 @@ export function DocumentUploadPopup() {
                           }`}
                         >
                           {status.message}
+                        </div>
+                      )}
+                      {/* Progress bar for processing */}
+                      {status.status === 'processing' && status.progress !== undefined && (
+                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                          <div
+                            className="bg-purple-500 h-1.5 rounded-full transition-all duration-300"
+                            style={{ width: `${status.progress}%` }}
+                          />
                         </div>
                       )}
                     </div>

@@ -37,26 +37,24 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
       const header = `Source: ${doc.metadata.filename} (Page ${doc.metadata.page || 'N/A'})`;
       const relatedImageUrls = getRelatedImageUrls(doc.metadata);
 
-      // For image chunks, display the images
+      // For image chunks, display the specific image with its AI-generated description
       if (doc.metadata.contentType === 'image' && relatedImageUrls.length > 0) {
         const imageDescription = doc.metadata.content || 'Image from document';
-        const imagesMarkdown = relatedImageUrls
-          .map((url) => {
-            const uniqueImageId = `Figure ${imageCounter}`;
-            const cleanFilename = doc.metadata.filename
-              .replace(/\.(pdf|png|jpg|jpeg)$/i, '')
-              .replace(/[^a-zA-Z0-9\s-]/g, ' ')
-              .trim();
-            const pageInfo = doc.metadata.page ? ` (Page ${doc.metadata.page})` : '';
-            const cleanAlt = `${uniqueImageId} from ${cleanFilename}${pageInfo}`;
+        // Use only the first URL - this is the specific image for this chunk
+        const imageUrl = relatedImageUrls[0];
+        const uniqueImageId = `Figure ${imageCounter}`;
+        const cleanFilename = doc.metadata.filename
+          .replace(/\.(pdf|png|jpg|jpeg)$/i, '')
+          .replace(/[^a-zA-Z0-9\s-]/g, ' ')
+          .trim();
+        const pageInfo = doc.metadata.page ? ` (Page ${doc.metadata.page})` : '';
+        const cleanAlt = `${uniqueImageId} from ${cleanFilename}${pageInfo}`;
 
-            imageCounter++;
+        imageCounter++;
 
-            return `![${cleanAlt}](${url})\n*${uniqueImageId} shows visual content from the document.*`;
-          })
-          .join('\n\n');
+        const imageMarkdown = `![${cleanAlt}](${imageUrl})\n*${uniqueImageId}: ${imageDescription}*`;
 
-        return `${header}\n${imageDescription}\n\n${imagesMarkdown}`;
+        return `${header}\n${imageMarkdown}`;
       }
 
       // For text/table chunks with related images, include both text and images
