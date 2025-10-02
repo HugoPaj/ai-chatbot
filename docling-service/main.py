@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import logging
 import time
+import httpx
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -204,6 +205,79 @@ def clean_text_content(text: str) -> str:
 
     return text
 
+async def analyze_image_with_vision(image_base64: str, page_no: int, filename: str) -> str:
+    """
+    Use Claude's vision capabilities to generate detailed image descriptions
+    """
+    try:
+        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not anthropic_api_key:
+            logger.warning("ANTHROPIC_API_KEY not found, using generic description")
+            return "Engineering technical diagram chart graph illustration"
+
+        # Prepare the vision analysis prompt
+        prompt = f"""Analyze this image from page {page_no} of the document "{filename}".
+
+Provide a detailed, specific description that includes:
+1. What type of diagram/figure it is (graph, circuit diagram, flowchart, equation, table, photo, etc.)
+2. The main concepts, variables, or components shown
+3. Any labels, axes, titles, or key text visible
+4. The relationships or processes being illustrated
+
+Be specific and technical. Focus on the content that would help someone understand what this figure shows without seeing it.
+
+Keep your description to 2-3 sentences maximum, dense with technical information."""
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": anthropic_api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json"
+                },
+                json={
+                    "model": "claude-3-5-haiku-20241022",
+                    "max_tokens": 300,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "image/png",
+                                        "data": image_base64
+                                    }
+                                },
+                                {
+                                    "type": "text",
+                                    "text": prompt
+                                }
+                            ]
+                        }
+                    ]
+                }
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                description = result.get("content", [{}])[0].get("text", "")
+                if description:
+                    logger.info(f"Generated vision description: {description[:100]}...")
+                    return description
+                else:
+                    logger.warning("Empty description from vision API")
+                    return "Engineering technical diagram chart graph illustration"
+            else:
+                logger.error(f"Vision API error: {response.status_code} - {response.text}")
+                return "Engineering technical diagram chart graph illustration"
+
+    except Exception as e:
+        logger.error(f"Error analyzing image with vision: {e}")
+        return "Engineering technical diagram chart graph illustration"
+
 def extract_image_from_picture(picture) -> Optional[str]:
     """Extract image data from a docling picture element and return as base64"""
     try:
@@ -256,7 +330,7 @@ def extract_image_from_picture(picture) -> Optional[str]:
         logger.warning(f"Error extracting image from picture element: {e}")
         return None
 
-def extract_chunks_from_json(doc_dict: dict, doc: DoclingDocument, filename: str = '', max_chunk_size: int = 1000) -> List[ProcessedChunk]:
+async def extract_chunks_from_json(doc_dict: dict, doc: DoclingDocument, filename: str = '', max_chunk_size: int = 1000) -> List[ProcessedChunk]:
     """Extract chunks from DoclingDocument JSON representation (lossless method)"""
     chunks = []
 
@@ -378,32 +452,17 @@ def extract_chunks_from_json(doc_dict: dict, doc: DoclingDocument, filename: str
                                 page_no = prov.page_no
                                 break
 
-                    # Create descriptive content
-                    document_subject = ''
-                    if filename:
-                        filename_lower = filename.lower()
-                        if 'termodinamica' in filename_lower or 'thermodynamics' in filename_lower:
-                            document_subject = 'thermodynamics termodinamica'
-                        elif 'mecanica' in filename_lower or 'mechanics' in filename_lower:
-                            document_subject = 'mechanics mecanica'
-                        elif 'fluidos' in filename_lower or 'fluids' in filename_lower:
-                            document_subject = 'fluids fluidos'
-                        elif 'calor' in filename_lower or 'heat' in filename_lower:
-                            document_subject = 'heat transfer calor'
+                    # Use vision AI to generate detailed description
+                    logger.info(f"Analyzing image {i+1} with vision AI...")
+                    vision_description = await analyze_image_with_vision(image_data, page_no, filename)
 
-                    content_parts = [
-                        f"Diagram figure image from page {page_no}",
-                        f"Visual content from {filename}",
-                        "Engineering technical diagram chart graph illustration",
-                        document_subject,
-                        "Scientific educational academic content",
-                        f"Page {page_no} visual material"
-                    ]
-
+                    # Add caption if available
+                    caption_text = ""
                     if hasattr(picture, 'caption') and picture.caption:
-                        content_parts.append(f"Caption: {picture.caption}")
+                        caption_text = f" Caption: {picture.caption}"
 
-                    content = ' '.join(filter(None, content_parts))
+                    # Combine vision description with metadata
+                    content = f"{vision_description} (Page {page_no} from {filename}){caption_text}"
 
                     chunks.append(ProcessedChunk(
                         content=content,
@@ -482,7 +541,7 @@ async def process_document(file: UploadFile = File(..., max_size=MAX_UPLOAD_SIZE
         doc_dict = doc.export_to_dict()
 
         # Extract chunks from JSON
-        chunks = extract_chunks_from_json(doc_dict, doc, file.filename or 'document')
+        chunks = await extract_chunks_from_json(doc_dict, doc, file.filename or 'document')
 
         # Get total pages from JSON - pages is at top level
         total_pages = len(doc_dict.get('pages', []))

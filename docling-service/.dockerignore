@@ -1,17 +1,55 @@
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+# Ignore git files
 .git
 .gitignore
+.github
+
+# Ignore Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Ignore virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ignore documentation
 README.md
-.pytest_cache
-.coverage
-.nyc_output
-node_modules
-.DS_Store
-*.log
+*.md
+docs/
+
+# Ignore test files
+tests/
+test_*.py
+*_test.py
+.pytest_cache/
+
+# Ignore deployment files
 .gcloudignore
-requirements-minimal.txt
-deploy-debug.sh
-update-dockerhub.sh
+deploy-to-gcr.sh
+docker-compose.yml
+
+# Ignore logs and databases
+*.log
+*.db
+*.sqlite
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Keep only essential files
+!requirements-copy.txt
+!requirements.txt
+!main.py
+!Dockerfile

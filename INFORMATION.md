@@ -183,6 +183,9 @@ aws s3 mb s3://stanford-ai-files --endpoint-url https://your-account.r2.cloudfla
 
 ```bash
 aws s3 rm s3://your-existing-bucket --recursive --endpoint-url https://your-account.r2.cloudflarestorage.com
+
+aws s3 rm s3://ragchatbot --recursive --endpoint-url https://86bfcd7c34b2294a200ff75184056984.r2.cloudflarestorage.com
+
 ```
 
 **5. Run Migrations & Setup**

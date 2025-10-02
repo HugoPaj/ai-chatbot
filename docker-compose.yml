@@ -7,6 +7,7 @@ services:
       - "8001:8001"
     environment:
       - PORT=8001
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     volumes:
       - ./docling-service:/app
     restart: unless-stopped
