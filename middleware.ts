@@ -18,6 +18,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow API key authentication for docling service endpoints
+  if (pathname.startsWith('/api/rag-documents/store-chunks')) {
+    const apiKey = request.headers.get('x-api-key');
+    const expectedApiKey = process.env.DOCLING_API_KEY;
+
+    if (apiKey && expectedApiKey && apiKey === expectedApiKey) {
+      // Valid API key, allow the request to proceed
+      return NextResponse.next();
+    }
+    // If no valid API key, continue to check for session token below
+  }
+
   // Allow unauthenticated access to login page
   if (pathname === '/login') {
     return NextResponse.next();
@@ -62,7 +74,6 @@ export async function middleware(request: NextRequest) {
     );
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-
 
   // Add user type to request headers for API routes to use
   const response = NextResponse.next();
