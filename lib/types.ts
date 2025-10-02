@@ -27,8 +27,8 @@ export interface DocumentChunk {
     // Multimodal enhancements
     contentType: ContentType;
     coordinates?: Coordinates;
-    imageUrl?: string;
     imageData?: string; // Base64 encoded image data for embedding
+    relatedImageUrls?: string[]; // R2 URLs of images on the same page
     tableStructure?: TableStructure;
     originalImagePath?: string; // For image files uploaded directly
     pdfUrl?: string; // R2 URL for the source PDF document
@@ -66,7 +66,7 @@ export interface CitationChunk {
   section?: string;
   score: number;
   coordinates?: Coordinates;
-  imageUrl?: string;
+  relatedImageUrls?: string[]; // R2 URLs of images on the same page
   pdfUrl?: string; // R2 URL for the source PDF document
 }
 

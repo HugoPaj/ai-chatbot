@@ -50,6 +50,42 @@ const cleanFilename = (filePath: string, defaultName: string): string => {
   return filename;
 };
 
+// Helper function to upload image to R2 storage
+const uploadImageToR2 = async (
+  imageBase64: string,
+  chunkIndex: number,
+): Promise<string> => {
+  console.log(`    🖼️  Processing image chunk ${chunkIndex + 1}`);
+
+  try {
+    const { put } = await import('@/lib/r2');
+
+    if (!process.env.R2_ACCOUNT_ID || !process.env.R2_ACCESS_KEY_ID) {
+      console.warn(`    ⚠️  R2 configuration not available - using data URL fallback`);
+      return `data:image/png;base64,${imageBase64}`;
+    }
+
+    const imageHash = crypto
+      .createHash('md5')
+      .update(imageBase64)
+      .digest('hex')
+      .slice(0, 16);
+    const imageFileName = `doc-images/${imageHash}.png`;
+    const imageBuffer = Buffer.from(imageBase64, 'base64');
+
+    const r2Response = await put(imageFileName, imageBuffer, {
+      access: 'public',
+      contentType: 'image/png',
+    });
+
+    console.log(`    ✅ Uploaded image to R2: ${r2Response.url}`);
+    return r2Response.url;
+  } catch (error: any) {
+    console.error(`    ❌ Failed to upload image to R2:`, error.message);
+    return `data:image/png;base64,${imageBase64}`;
+  }
+};
+
 // Helper function to chunk text
 const chunkText = (
   text: string,
@@ -197,9 +233,11 @@ const processWithDocling = async (
       `    📊 Content breakdown: ${textChunks} text, ${imageChunks} images, ${tableChunks} tables`,
     );
 
-    // Convert Docling chunks to DocumentChunk format
+    // Convert Docling chunks to DocumentChunk format and upload images
     const filename = cleanFilename(filePath, `unknown.${fileExtension}`);
-    const documentChunks: DocumentChunk[] = await Promise.all(
+    const imageUrlsByPageMap = new Map<string, string[]>();
+
+    const processedChunks: DocumentChunk[] = await Promise.all(
       doclingResult.chunks.map(async (chunk, index) => {
         const coordinates: Coordinates | undefined = chunk.coordinates
           ? {
@@ -218,106 +256,14 @@ const processWithDocling = async (
             }
           : undefined;
 
-        // Store image chunks in Cloudflare R2 (for serverless environments)
-        let imageUrl: string | undefined;
+        // Upload image chunks to R2 and collect URLs by page
         if (chunk.content_type === 'image' && chunk.image_data) {
-          console.log(
-            `    🖼️  [R2 DEBUG] Processing image chunk ${index + 1}`,
-          );
-          console.log(
-            `    🖼️  [R2 DEBUG] Image data length: ${chunk.image_data.length} chars`,
-          );
-          console.log(
-            `    🖼️  [R2 DEBUG] R2 config present: ${!!process.env.R2_ACCOUNT_ID}`,
-          );
+          const uploadedUrl = await uploadImageToR2(chunk.image_data, index);
+          const pageKey = `${filename}:${chunk.page || 1}`;
 
-          try {
-            // Try to import R2 utility
-            console.log(
-              `    🔧 [R2 DEBUG] Attempting to import R2 utility...`,
-            );
-            const { put } = await import('@/lib/r2');
-            console.log(
-              `    ✅ [R2 DEBUG] Successfully imported R2 utility`,
-            );
-
-            // Check if R2 config is available
-            if (!process.env.R2_ACCOUNT_ID || !process.env.R2_ACCESS_KEY_ID) {
-              console.warn(
-                `    ⚠️  [R2 DEBUG] R2 configuration not found - using fallback`,
-              );
-              throw new Error('R2 configuration not available');
-            }
-
-            const imageHash = crypto
-              .createHash('md5')
-              .update(chunk.image_data)
-              .digest('hex')
-              .slice(0, 16);
-            const imageFileName = `doc-images/${imageHash}.png`;
-
-            console.log(
-              `    🔧 [R2 DEBUG] Generated filename: ${imageFileName}`,
-            );
-            console.log(`    🔧 [R2 DEBUG] Image hash: ${imageHash}`);
-
-            // Upload to Cloudflare R2
-            const imageBuffer = Buffer.from(chunk.image_data, 'base64');
-            console.log(
-              `    🔧 [R2 DEBUG] Buffer size: ${imageBuffer.length} bytes`,
-            );
-
-            console.log(`    🚀 [R2 DEBUG] Starting R2 upload...`);
-            try {
-              const r2Response = await put(imageFileName, imageBuffer, {
-                access: 'public',
-                contentType: 'image/png', // PDF extracted images are always PNG
-              });
-              console.log(`    ✅ [R2 DEBUG] R2 upload successful!`);
-              console.log(
-                `    ✅ [R2 DEBUG] R2 response:`,
-                JSON.stringify(r2Response, null, 2),
-              );
-              imageUrl = r2Response.url;
-            } catch (uploadError: any) {
-              console.error(`    ❌ [R2 DEBUG] Upload failed for chunk ${index + 1}:`, uploadError.message);
-              throw uploadError; // Re-throw to see the detailed error
-            }
-
-            console.log(`    🖼️  [R2 DEBUG] Final image URL: ${imageUrl}`);
-
-            // Test if the URL is accessible
-            try {
-              const testResponse = await fetch(imageUrl, { method: 'HEAD' });
-              console.log(
-                `    🌐 [R2 DEBUG] URL accessibility test: ${testResponse.status} ${testResponse.statusText}`,
-              );
-            } catch (testError) {
-              console.warn(
-                `    ⚠️  [R2 DEBUG] URL accessibility test failed:`,
-                testError,
-              );
-            }
-          } catch (error: any) {
-            console.error(
-              `    ❌ [R2 DEBUG] Failed to save image to Cloudflare R2:`,
-              error,
-            );
-            console.error(`    ❌ [R2 DEBUG] Error details:`, error.message);
-            if (error.stack) {
-              console.error(`    ❌ [R2 DEBUG] Stack trace:`, error.stack);
-            }
-
-            // Fallback: store as data URL for immediate use
-            imageUrl = `data:image/png;base64,${chunk.image_data}`;
-            console.log(
-              `    🔄 [R2 DEBUG] Using fallback data URL (length: ${imageUrl.length})`,
-            );
-          }
-
-          console.log(
-            `    ✅ [R2 DEBUG] Final imageUrl for chunk ${index + 1}: ${imageUrl ? `${imageUrl.substring(0, 100)}...` : 'undefined'}`,
-          );
+          const existingUrls = imageUrlsByPageMap.get(pageKey) || [];
+          existingUrls.push(uploadedUrl);
+          imageUrlsByPageMap.set(pageKey, existingUrls);
         }
 
         return {
@@ -332,14 +278,31 @@ const processWithDocling = async (
             coordinates,
             tableStructure,
             imageData: chunk.image_data,
-            imageUrl,
-            pdfUrl, // Add PDF R2 URL to metadata
+            pdfUrl,
           },
         };
       }),
     );
 
-    return documentChunks;
+    // Enrich all chunks with related image URLs from the same page
+    const enrichedChunks = processedChunks.map((chunk) => {
+      const pageKey = `${chunk.metadata.filename}:${chunk.metadata.page || 1}`;
+      const relatedImageUrls = imageUrlsByPageMap.get(pageKey);
+
+      if (relatedImageUrls && relatedImageUrls.length > 0) {
+        return {
+          ...chunk,
+          metadata: {
+            ...chunk.metadata,
+            relatedImageUrls,
+          },
+        };
+      }
+
+      return chunk;
+    });
+
+    return enrichedChunks;
   } catch (error) {
     console.error(`    ❌ Docling processing failed:`, error);
     throw error;
@@ -462,127 +425,16 @@ export const DocumentProcessor = {
     try {
       console.log(`    🖼️  Processing image file: ${filePath}`);
 
-      // Check if file exists
       if (!fs.existsSync(filePath)) {
         throw new Error(`Image file not found: ${filePath}`);
       }
 
-      // Read image file and convert to base64
       const imageBuffer = await readFile(filePath);
       const imageBase64 = imageBuffer.toString('base64');
-
-      // Store image in Cloudflare R2 (for serverless environments)
-      console.log(`    🖼️  [R2 DEBUG] Processing uploaded image file`);
-      console.log(
-        `    🖼️  [R2 DEBUG] Image base64 length: ${imageBase64.length} chars`,
-      );
-      console.log(
-        `    🖼️  [R2 DEBUG] Image buffer size: ${imageBuffer.length} bytes`,
-      );
-      console.log(
-        `    🖼️  [R2 DEBUG] R2 config present: ${!!process.env.R2_ACCOUNT_ID}`,
-      );
-
-      let imageUrl: string;
-      try {
-        console.log(
-          `    🔧 [R2 DEBUG] Attempting to import R2 utility for uploaded image...`,
-        );
-        const { put } = await import('@/lib/r2');
-        console.log(
-          `    ✅ [R2 DEBUG] Successfully imported R2 utility for uploaded image`,
-        );
-
-        // Check if R2 config is available
-        if (!process.env.R2_ACCOUNT_ID || !process.env.R2_ACCESS_KEY_ID) {
-          console.warn(
-            `    ⚠️  [R2 DEBUG] R2 configuration not available for uploaded image - using fallback`,
-          );
-          throw new Error('R2 configuration not available');
-        }
-
-        const imageHash = crypto
-          .createHash('md5')
-          .update(imageBase64)
-          .digest('hex')
-          .slice(0, 16);
-        const imageFileName = `doc-images/${imageHash}.png`;
-
-        console.log(
-          `    🔧 [R2 DEBUG] Generated filename for uploaded image: ${imageFileName}`,
-        );
-        console.log(
-          `    🔧 [R2 DEBUG] Image hash for uploaded image: ${imageHash}`,
-        );
-
-        // Upload to Cloudflare R2
-        console.log(
-          `    🚀 [R2 DEBUG] Starting R2 upload for uploaded image...`,
-        );
-        // Determine content type based on file extension
-        const contentType =
-          filePath.toLowerCase().endsWith('.jpg') ||
-          filePath.toLowerCase().endsWith('.jpeg')
-            ? 'image/jpeg'
-            : 'image/png';
-
-        const r2Response = await put(imageFileName, imageBuffer, {
-          access: 'public',
-          contentType,
-        });
-        console.log(
-          `    ✅ [R2 DEBUG] R2 upload successful for uploaded image!`,
-        );
-        console.log(
-          `    ✅ [R2 DEBUG] R2 response for uploaded image:`,
-          JSON.stringify(r2Response, null, 2),
-        );
-
-        imageUrl = r2Response.url;
-        console.log(
-          `    🖼️  [R2 DEBUG] Final image URL for uploaded image: ${imageUrl}`,
-        );
-
-        // Test if the URL is accessible
-        try {
-          const testResponse = await fetch(imageUrl, { method: 'HEAD' });
-          console.log(
-            `    🌐 [R2 DEBUG] URL accessibility test for uploaded image: ${testResponse.status} ${testResponse.statusText}`,
-          );
-        } catch (testError) {
-          console.warn(
-            `    ⚠️  [R2 DEBUG] URL accessibility test failed for uploaded image:`,
-            testError,
-          );
-        }
-      } catch (error: any) {
-        console.error(
-          `    ❌ [R2 DEBUG] Failed to save uploaded image to Cloudflare R2:`,
-          error,
-        );
-        console.error(
-          `    ❌ [R2 DEBUG] Error details for uploaded image:`,
-          error.message,
-        );
-        if (error.stack) {
-          console.error(
-            `    ❌ [R2 DEBUG] Stack trace for uploaded image:`,
-            error.stack,
-          );
-        }
-
-        // Fallback: use data URL
-        imageUrl = `data:image/png;base64,${imageBase64}`;
-        console.log(
-          `    🔄 [R2 DEBUG] Using fallback data URL for uploaded image (length: ${imageUrl.length})`,
-        );
-      }
-
       const filename = cleanFilename(filePath, 'unknown.jpg');
 
-      console.log(
-        `    📸 Converted image to base64 (${imageBase64.length} chars)`,
-      );
+      // Upload to R2 and get URL
+      const uploadedImageUrl = await uploadImageToR2(imageBase64, 0);
 
       return {
         content: `Image: ${filename}. This image contains visual content that can be searched and analyzed using multimodal AI.`,
@@ -592,9 +444,9 @@ export const DocumentProcessor = {
           filename,
           contentHash: contentHash || '',
           contentType: 'image',
-          imageData: imageBase64, // Store base64 data for embedding generation
+          imageData: imageBase64,
           originalImagePath: filePath,
-          imageUrl,
+          relatedImageUrls: [uploadedImageUrl],
         },
       };
     } catch (error) {
@@ -613,20 +465,14 @@ export const DocumentProcessor = {
         `    🖼️  Processing image file with existing URL: ${filePath}`,
       );
 
-      // Check if file exists
       if (!fs.existsSync(filePath)) {
         throw new Error(`Image file not found: ${filePath}`);
       }
 
-      // Read image file and convert to base64 for embedding generation
       const imageBuffer = await readFile(filePath);
       const imageBase64 = imageBuffer.toString('base64');
-
       const filename = cleanFilename(filePath, 'unknown.jpg');
 
-      console.log(
-        `    📸 Converted image to base64 (${imageBase64.length} chars)`,
-      );
       console.log(`    🔗 Using provided image URL: ${existingImageUrl}`);
 
       return {
@@ -637,9 +483,9 @@ export const DocumentProcessor = {
           filename,
           contentHash: contentHash || '',
           contentType: 'image',
-          imageData: imageBase64, // Store base64 data for embedding generation
+          imageData: imageBase64,
           originalImagePath: filePath,
-          imageUrl: existingImageUrl, // Use the provided URL
+          relatedImageUrls: existingImageUrl ? [existingImageUrl] : undefined,
         },
       };
     } catch (error) {

@@ -8,7 +8,7 @@ export class VectorStore {
   private pinecone: Pinecone;
   private indexName;
 
-  constructor(indexName = 'v3') {
+  constructor(indexName = 'v4') {
     if (!process.env.PINECONE_API_KEY) {
       throw new Error('PINECONE_API_KEY is not configured');
     }
@@ -241,11 +241,12 @@ export class VectorStore {
           };
 
           if (doc.metadata.coordinates) {
-            // Pinecone metadata values must be primitive; store coordinates as JSON string
             baseMetadata.coordinates = JSON.stringify(doc.metadata.coordinates);
           }
-          if (doc.metadata.imageUrl) {
-            baseMetadata.imageUrl = doc.metadata.imageUrl;
+          if (doc.metadata.relatedImageUrls) {
+            baseMetadata.relatedImageUrls = JSON.stringify(
+              doc.metadata.relatedImageUrls,
+            );
           }
           if (doc.metadata.tableStructure) {
             baseMetadata.tableStructure = JSON.stringify(
@@ -590,10 +591,17 @@ export class VectorStore {
       if (queryResponse.matches) {
         for (const match of queryResponse.matches) {
           if (
-            match.metadata?.imageUrl &&
-            typeof match.metadata.imageUrl === 'string'
+            match.metadata?.relatedImageUrls &&
+            typeof match.metadata.relatedImageUrls === 'string'
           ) {
-            r2UrlsSet.add(match.metadata.imageUrl);
+            try {
+              const urls = JSON.parse(
+                match.metadata.relatedImageUrls,
+              ) as string[];
+              urls.forEach((url) => r2UrlsSet.add(url));
+            } catch (error) {
+              console.warn(`Failed to parse relatedImageUrls:`, error);
+            }
           }
         }
       }

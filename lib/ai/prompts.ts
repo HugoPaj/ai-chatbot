@@ -8,41 +8,76 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
   const filteredDocs = similarDocs.filter((doc) => {
     // Use lower threshold for images since they might have lower similarity scores with text queries
     if (doc.metadata.contentType === 'image') {
-      return doc.score > 0.02; // Further lowered threshold to catch more images
+      return doc.score > 0.02;
     }
     return doc.score > 0.3;
   });
 
+  // Helper to parse relatedImageUrls
+  const getRelatedImageUrls = (metadata: SearchResult['metadata']): string[] => {
+    if (!metadata.relatedImageUrls) return [];
+    if (typeof metadata.relatedImageUrls === 'string') {
+      try {
+        return JSON.parse(metadata.relatedImageUrls);
+      } catch {
+        return [];
+      }
+    }
+    return metadata.relatedImageUrls;
+  };
+
   // Check if we have any images to provide explicit guidance to the AI
-  const hasImages = filteredDocs.some(
-    (doc) => doc.metadata.contentType === 'image' && doc.metadata.imageUrl,
-  );
+  const hasImages = filteredDocs.some((doc) => {
+    const relatedImages = getRelatedImageUrls(doc.metadata);
+    return relatedImages.length > 0;
+  });
 
   const contextContent = filteredDocs
     .map((doc) => {
       const header = `Source: ${doc.metadata.filename} (Page ${doc.metadata.page || 'N/A'})`;
+      const relatedImageUrls = getRelatedImageUrls(doc.metadata);
 
-      if (doc.metadata.contentType === 'image' && doc.metadata.imageUrl) {
-        // Include the image itself when available with description
+      // For image chunks, display the images
+      if (doc.metadata.contentType === 'image' && relatedImageUrls.length > 0) {
         const imageDescription = doc.metadata.content || 'Image from document';
-        const uniqueImageId = `Figure ${imageCounter}`;
-
-        // Clean up filename for better readability
-        const cleanFilename = doc.metadata.filename
-          ? doc.metadata.filename
+        const imagesMarkdown = relatedImageUrls
+          .map((url) => {
+            const uniqueImageId = `Figure ${imageCounter}`;
+            const cleanFilename = doc.metadata.filename
               .replace(/\.(pdf|png|jpg|jpeg)$/i, '')
               .replace(/[^a-zA-Z0-9\s-]/g, ' ')
-              .trim()
-          : 'document';
+              .trim();
+            const pageInfo = doc.metadata.page ? ` (Page ${doc.metadata.page})` : '';
+            const cleanAlt = `${uniqueImageId} from ${cleanFilename}${pageInfo}`;
 
-        const pageInfo = doc.metadata.page
-          ? ` (Page ${doc.metadata.page})`
-          : '';
-        const cleanAlt = `${uniqueImageId} from ${cleanFilename}${pageInfo}`;
+            imageCounter++;
 
-        imageCounter++;
+            return `![${cleanAlt}](${url})\n*${uniqueImageId} shows visual content from the document.*`;
+          })
+          .join('\n\n');
 
-        return `${header}\n${imageDescription}\n\n![${cleanAlt}](${doc.metadata.imageUrl})\n\n*${uniqueImageId} shows visual content from the document that illustrates the concepts being discussed.*`;
+        return `${header}\n${imageDescription}\n\n${imagesMarkdown}`;
+      }
+
+      // For text/table chunks with related images, include both text and images
+      if (relatedImageUrls.length > 0) {
+        const imagesMarkdown = relatedImageUrls
+          .map((url) => {
+            const uniqueImageId = `Figure ${imageCounter}`;
+            const cleanFilename = doc.metadata.filename
+              .replace(/\.(pdf|png|jpg|jpeg)$/i, '')
+              .replace(/[^a-zA-Z0-9\s-]/g, ' ')
+              .trim();
+            const pageInfo = doc.metadata.page ? ` (Page ${doc.metadata.page})` : '';
+            const cleanAlt = `${uniqueImageId} from ${cleanFilename}${pageInfo}`;
+
+            imageCounter++;
+
+            return `![${cleanAlt}](${url})`;
+          })
+          .join('\n');
+
+        return `${header}\n${doc.metadata.content || ''}\n\n${imagesMarkdown}`;
       }
 
       return `${header}\n${doc.metadata.content || ''}`;

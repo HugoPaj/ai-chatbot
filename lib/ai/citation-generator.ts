@@ -59,18 +59,26 @@ export function generateCitations(
       const topResults = sortedResults.slice(0, 30); // Max 30 chunks per source AFFECTS SPEED
 
       // Create citation chunks
-      const chunks: CitationChunk[] = topResults.map((result) => ({
-        id: generateUUID(),
-        content: result.metadata.content,
-        source: result.metadata.source,
-        filename: result.metadata.filename,
-        page: result.metadata.page,
-        section: result.metadata.section,
-        score: result.score,
-        coordinates: result.metadata.coordinates,
-        imageUrl: result.metadata.imageUrl,
-        pdfUrl: result.metadata.pdfUrl, // Include PDF URL
-      }));
+      const chunks: CitationChunk[] = topResults.map((result) => {
+        const relatedImageUrls = result.metadata.relatedImageUrls
+          ? typeof result.metadata.relatedImageUrls === 'string'
+            ? JSON.parse(result.metadata.relatedImageUrls)
+            : result.metadata.relatedImageUrls
+          : undefined;
+
+        return {
+          id: generateUUID(),
+          content: result.metadata.content,
+          source: result.metadata.source,
+          filename: result.metadata.filename,
+          page: result.metadata.page,
+          section: result.metadata.section,
+          score: result.score,
+          coordinates: result.metadata.coordinates,
+          relatedImageUrls,
+          pdfUrl: result.metadata.pdfUrl,
+        };
+      });
 
       // Use the highest-scoring chunk's content as the primary source text
       const primaryChunk = chunks[0];
@@ -112,6 +120,12 @@ export function generateCitations(
       .slice(0, maxCitations);
 
     for (const result of topResults) {
+      const relatedImageUrls = result.metadata.relatedImageUrls
+        ? typeof result.metadata.relatedImageUrls === 'string'
+          ? JSON.parse(result.metadata.relatedImageUrls)
+          : result.metadata.relatedImageUrls
+        : undefined;
+
       const chunk: CitationChunk = {
         id: generateUUID(),
         content: result.metadata.content,
@@ -121,8 +135,8 @@ export function generateCitations(
         section: result.metadata.section,
         score: result.score,
         coordinates: result.metadata.coordinates,
-        imageUrl: result.metadata.imageUrl,
-        pdfUrl: result.metadata.pdfUrl, // Pass PDF URL to citation
+        relatedImageUrls,
+        pdfUrl: result.metadata.pdfUrl,
       };
 
       let sourceText = result.metadata.content;

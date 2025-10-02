@@ -114,7 +114,7 @@ export async function POST(request: Request) {
         console.log(`[RAG DEBUG] Final chunk metadata:`, {
           filename: singleChunk.metadata.filename,
           contentType: singleChunk.metadata.contentType,
-          imageUrl: singleChunk.metadata.imageUrl,
+          relatedImageUrls: singleChunk.metadata.relatedImageUrls,
           hasImageData: !!singleChunk.metadata.imageData,
         });
       }
@@ -159,7 +159,7 @@ export async function POST(request: Request) {
       imageChunks.forEach((chunk, index) => {
         console.log(`[RAG DEBUG] Image chunk ${index + 1}:`, {
           filename: chunk.metadata.filename,
-          imageUrl: chunk.metadata.imageUrl,
+          relatedImageUrls: chunk.metadata.relatedImageUrls,
           hasImageData: !!chunk.metadata.imageData,
           imageDataLength: chunk.metadata.imageData?.length || 0,
         });

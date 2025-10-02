@@ -43,7 +43,7 @@ export async function GET() {
           filename: doc.metadata.filename,
           page: doc.metadata.page,
           content: doc.metadata.content,
-          imageUrl: doc.metadata.imageUrl,
+          relatedImageUrls: doc.metadata.relatedImageUrls,
           hasImageData: !!doc.metadata.imageData,
         })),
         topTexts: textResults.slice(0, 2).map((doc) => ({
@@ -75,7 +75,7 @@ export async function GET() {
           filename: doc.metadata.filename,
           page: doc.metadata.page,
           content: doc.metadata.content,
-          imageUrl: doc.metadata.imageUrl,
+          relatedImageUrls: doc.metadata.relatedImageUrls,
         })),
         formattedContext: formatDocumentContext(thermoResults),
       },

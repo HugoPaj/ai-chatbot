@@ -346,8 +346,11 @@ export async function POST(request: Request) {
                   score: doc.score.toFixed(3),
                   file: doc.metadata.filename,
                   page: doc.metadata.page ?? 'N/A',
-                  hasImageUrl: !!doc.metadata.imageUrl,
-                  imageUrl: doc.metadata.imageUrl,
+                  hasRelatedImages: !!(doc.metadata.relatedImageUrls && (
+                    typeof doc.metadata.relatedImageUrls === 'string'
+                      ? JSON.parse(doc.metadata.relatedImageUrls).length > 0
+                      : doc.metadata.relatedImageUrls.length > 0
+                  )),
                 })),
               );
             }
@@ -382,7 +385,7 @@ export async function POST(request: Request) {
                   '[VectorStore] Image results details:',
                   imageResults.map((doc) => ({
                     score: doc.score,
-                    hasUrl: !!doc.metadata.imageUrl,
+                    hasRelatedImages: !!(doc.metadata.relatedImageUrls),
                     content: doc.metadata.content?.substring(0, 100),
                   })),
                 );

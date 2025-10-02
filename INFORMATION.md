@@ -1,4 +1,3 @@
-
 # AI Chatbot - Standalone Client Setup
 
 ## 🏢 Overview
@@ -8,18 +7,21 @@ This AI chatbot platform is designed for standalone client deployments. Each for
 ## ✨ Key Features
 
 ### 🎯 Business Model
+
 - **No Individual Subscriptions**: Removed traditional paywall and subscription system
 - **Single Organization Focus**: Each deployment serves one client organization
 - **Unlimited Access**: All verified organization users get unlimited requests
 - **Admin Control**: Platform admins manage users and knowledge base
 
 ### 🔐 Access Control
+
 - **Organization Email Verification**: Users must sign in with verified org emails
 - **No Guest Access**: Public registration disabled, access by invitation only
 - **Single Organization**: Deployment configured for one specific organization
 - **Role-Based Permissions**: Platform admins and regular users
 
 ### 📊 Admin Dashboard
+
 - **Admin Panel**: Manage platform settings and view analytics
 - **User Management**: Add/remove admin users
 - **Knowledge Base**: Upload documents for RAG (Retrieval-Augmented Generation)
@@ -32,6 +34,7 @@ This AI chatbot platform is designed for standalone client deployments. Each for
 This process works for completely new deployments from a fresh git clone:
 
 #### 1. Setup Environment
+
 ```bash
 # Clone the repository
 git clone <your-repo-url>
@@ -45,15 +48,19 @@ cp .env.example .env.local
 ```
 
 #### 2. Configure Admin Access
+
 Edit `lib/auth/admin.ts`:
+
 ```typescript
 const ADMIN_EMAILS = [
-  'your-email@domain.com', // Replace with YOUR email
+  "your-email@domain.com", // Replace with YOUR email
 ];
 ```
 
 #### 3. Setup Database Connection
+
 Add your database URL to `.env.local`:
+
 ```env
 # Use a fresh/empty database
 POSTGRES_URL=postgresql://username:password@host:5432/fresh_database_name
@@ -66,12 +73,14 @@ ANTHROPIC_API_KEY=your-anthropic-key
 ```
 
 #### 4. Run Migrations (Creates All Tables)
+
 ```bash
 # This creates all tables including the Org table
 npx tsx lib/db/migrate.ts
 ```
 
 #### 5. Add Client Organization Domain
+
 ```sql
 -- Add client's email domain for user access
 INSERT INTO "Org" (name, domain, type, "isActive", "maxUsersPerDay") VALUES
@@ -80,6 +89,7 @@ INSERT INTO "Org" (name, domain, type, "isActive", "maxUsersPerDay") VALUES
 ```
 
 #### 6. Test Setup
+
 ```bash
 # Start the application
 npm run dev
@@ -91,6 +101,7 @@ npm run dev
 ```
 
 **✅ What You Should See:**
+
 - Login page at `localhost:3000/login`
 - Successful admin login
 - Admin dashboard at `/dashboard` with:
@@ -102,6 +113,7 @@ npm run dev
 ## 🧹 Clean Start Workflow for Each Client
 
 ### When to Use This
+
 - Setting up for a new client
 - Starting fresh after testing/development
 - Moving from development to production
@@ -109,6 +121,7 @@ npm run dev
 ### Complete Clean Start Steps
 
 **1. Create Fresh Environment File**
+
 ```bash
 # Copy your template and modify for new client
 cp .env.local .env.stanford  # Example for Stanford
@@ -117,14 +130,17 @@ cp .env.local .env.stanford  # Example for Stanford
 **2. Database - Choose One:**
 
 **Option A: Brand New Database (Recommended)**
+
 ```sql
 CREATE DATABASE stanford_ai_chatbot;
 ```
+
 ```env
 POSTGRES_URL=postgresql://user:pass@host:5432/stanford_ai_chatbot
 ```
 
 **Option B: Clear Existing Database**
+
 ```sql
 -- Run these in order to clear all data
 TRUNCATE TABLE "DailyUsage" CASCADE;
@@ -143,10 +159,12 @@ TRUNCATE TABLE "Document" CASCADE;
 **3. Redis - Choose One:**
 
 **Option A: New Redis Database**
+
 - Create new database on Redis Cloud/Upstash
 - Update `REDIS_URL` in environment
 
 **Option B: Clear Existing Redis**
+
 ```bash
 redis-cli
 SELECT 0  # or your database number
@@ -156,16 +174,19 @@ FLUSHDB
 **4. R2 Storage - Choose One:**
 
 **Option A: New Bucket**
+
 ```bash
 aws s3 mb s3://stanford-ai-files --endpoint-url https://your-account.r2.cloudflarestorage.com
 ```
 
 **Option B: Clear Existing Bucket**
+
 ```bash
 aws s3 rm s3://your-existing-bucket --recursive --endpoint-url https://your-account.r2.cloudflarestorage.com
 ```
 
 **5. Run Migrations & Setup**
+
 ```bash
 # Create all tables fresh
 npx tsx lib/db/migrate.ts
@@ -179,6 +200,7 @@ INSERT INTO \"Org\" (name, domain, type, \"isActive\", \"maxUsersPerDay\") VALUE
 ```
 
 **6. Test Clean Start**
+
 ```bash
 # Start development server
 npm run dev
@@ -238,6 +260,7 @@ DOCLING_URL=http://localhost:8080  # If using document processing
 #### 2. Database Setup (Per Client) - FRESH START
 
 **Option A: Completely New Database (Recommended)**
+
 ```sql
 -- Create a brand new database for each client
 CREATE DATABASE stanford_ai_chatbot;
@@ -246,6 +269,7 @@ CREATE DATABASE google_ai_chatbot;
 ```
 
 **Option B: Same Database, Clear All Data**
+
 ```sql
 -- If reusing the same database, clear all data first
 TRUNCATE TABLE "DailyUsage" CASCADE;
@@ -260,18 +284,21 @@ TRUNCATE TABLE "AppSettings" CASCADE;
 ```
 
 **Step 2: Update Environment Variables**
+
 ```env
 # Update POSTGRES_URL to point to new database
 POSTGRES_URL=postgresql://username:password@host:5432/stanford_ai_chatbot
 ```
 
 **Step 3: Run Migrations on Fresh Database**
+
 ```bash
 # This will create all tables from scratch
 npx tsx lib/db/migrate.ts
 ```
 
 **Step 4: Add Client Organization**
+
 ```sql
 -- Add the client's organization (this is the FIRST entry in fresh DB)
 INSERT INTO "Org" (name, domain, type, "isActive", "maxUsersPerDay") VALUES
@@ -283,6 +310,7 @@ INSERT INTO "Org" (name, domain, type, "isActive", "maxUsersPerDay") VALUES
 ```
 
 **Step 5: Add Your Admin Access (Per Client)**
+
 ```sql
 -- Add your admin domain so you can access this client's platform
 INSERT INTO "Org" (name, domain, type, "isActive", "maxUsersPerDay") VALUES
@@ -292,6 +320,7 @@ INSERT INTO "Org" (name, domain, type, "isActive", "maxUsersPerDay") VALUES
 #### 3. Redis Setup (Per Client)
 
 **Option A: Separate Redis Instance Per Client (Most Secure)**
+
 ```bash
 # Create new Redis database for each client
 # On Redis Cloud/Upstash - create new database
@@ -300,6 +329,7 @@ REDIS_URL=redis://username:password@redis-stanford.upstash.io:6379
 ```
 
 **Option B: Same Redis, Different Database Numbers**
+
 ```env
 # Use different database numbers (0-15 available)
 REDIS_URL=redis://username:password@your-redis.com:6379/0  # Client 1
@@ -308,6 +338,7 @@ REDIS_URL=redis://username:password@your-redis.com:6379/2  # Client 3
 ```
 
 **Option C: Clear Redis Data (If Reusing)**
+
 ```bash
 # Connect to Redis and clear all data
 redis-cli
@@ -319,6 +350,7 @@ FLUSHALL # Clears all databases (CAREFUL!)
 #### 4. Storage Setup (Per Client)
 
 **Create Unique R2 Bucket:**
+
 ```bash
 # Create new bucket for each client
 aws s3 mb s3://stanford-chatbot-files --endpoint-url https://your-account.r2.cloudflarestorage.com
@@ -329,6 +361,7 @@ aws s3api put-bucket-cors --bucket stanford-chatbot-files --cors-configuration f
 ```
 
 **Clear Existing R2 Bucket (If Reusing):**
+
 ```bash
 # Delete all content from existing bucket
 aws s3 rm s3://your-bucket-name --recursive --endpoint-url https://your-account.r2.cloudflarestorage.com
@@ -337,6 +370,7 @@ aws s3 rm s3://your-bucket-name --recursive --endpoint-url https://your-account.
 #### 4. Domain/Deployment Setup (Per Client)
 
 **Update App Configuration:**
+
 - Deploy to client-specific domain: `https://ai.stanford.edu`
 - Update `NEXT_PUBLIC_APP_URL` to match
 - Configure SSL certificates for the domain
@@ -344,11 +378,13 @@ aws s3 rm s3://your-bucket-name --recursive --endpoint-url https://your-account.
 #### 5. Client-Specific Customization (Optional)
 
 **Branding (if offering white-label):**
+
 - Update logo in `public/` folder
 - Modify colors in `tailwind.config.js`
 - Update site title in `app/layout.tsx`
 
 **Model Access (if different per client):**
+
 - Modify `lib/ai/entitlements.ts` if client has specific model requirements
 - Update API keys if client provides their own AI service accounts
 
@@ -358,12 +394,14 @@ aws s3 rm s3://your-bucket-name --recursive --endpoint-url https://your-account.
 ## Pre-Deployment Checklist
 
 ### Infrastructure
+
 - [ ] New database created and configured
 - [ ] New R2 bucket created
 - [ ] Redis instance configured (if separate)
 - [ ] Domain/subdomain configured with SSL
 
 ### Environment Variables
+
 - [ ] POSTGRES_URL updated for client database
 - [ ] AUTH_SECRET generated (unique per client)
 - [ ] NEXT_PUBLIC_APP_URL updated to client domain
@@ -371,12 +409,14 @@ aws s3 rm s3://your-bucket-name --recursive --endpoint-url https://your-account.
 - [ ] CLOUDFLARE_ACCESS_KEY_ID/SECRET updated
 
 ### Database Setup
+
 - [ ] Migrations run successfully
 - [ ] Client organization added to database
 - [ ] Admin access organization added
 - [ ] Test user sign-in with client email
 
 ### Testing
+
 - [ ] Admin can sign in and access dashboard
 - [ ] Client users can sign in with org email
 - [ ] Chat functionality works
@@ -384,6 +424,7 @@ aws s3 rm s3://your-bucket-name --recursive --endpoint-url https://your-account.
 - [ ] All AI models accessible
 
 ### Post-Deployment
+
 - [ ] Provide client with platform URL
 - [ ] Document client-specific access domains
 - [ ] Set up monitoring/analytics (if needed)
@@ -396,6 +437,7 @@ Once deployed for multiple clients:
 1. **Multi-Client Access**: You can sign in to any client's platform using your admin email (as long as you've added your domain to their database)
 
 2. **Organization Management**: Through each client's dashboard, you can:
+
    - Add/remove their organization domains
    - Monitor usage across their organization
    - Adjust settings per organization
@@ -407,12 +449,14 @@ Once deployed for multiple clients:
 ### Security Notes
 
 ⚠️ **CRITICAL**: Never share the same:
+
 - Database between clients
 - AUTH_SECRET between deployments
 - R2 buckets between clients
 - Environment variables between clients
 
 ✅ **OK to Share**:
+
 - AI API keys (if you're paying for them)
 - Your admin email domain (for access)
 - Base application code
@@ -420,19 +464,22 @@ Once deployed for multiple clients:
 ## 🏗️ Architecture
 
 ### User Types & Access
-| User Type | Access Level | Features |
-|-----------|-------------|----------|
-| **Guest** | None | Must sign in with org email |
-| **Organization User** | Unlimited | All AI models, unlimited requests |
-| **Super Admin** | Full Control | Manage organizations, analytics, settings |
+
+| User Type             | Access Level | Features                                  |
+| --------------------- | ------------ | ----------------------------------------- |
+| **Guest**             | None         | Must sign in with org email               |
+| **Organization User** | Unlimited    | All AI models, unlimited requests         |
+| **Super Admin**       | Full Control | Manage organizations, analytics, settings |
 
 ### Database Schema
+
 - **`Org`**: Organization information (name, domain, type, settings)
 - **`OrgAdmin`**: Organization administrators
 - **`User`**: User accounts with organization association
 - **`AppSettings`**: Global platform configuration
 
 ### Authentication Flow
+
 1. User visits platform → Redirected to org sign-in page
 2. User enters organization email address
 3. System verifies email domain against registered organizations
@@ -444,6 +491,7 @@ Once deployed for multiple clients:
 ### Adding Organizations
 
 **Via Admin Dashboard:**
+
 1. Sign in as super admin
 2. Go to Dashboard → Organization Management
 3. Click "Add Organization"
@@ -454,12 +502,14 @@ Once deployed for multiple clients:
    - User limits (optional)
 
 **Via Database:**
+
 ```sql
 INSERT INTO "Org" (name, domain, type, "isActive", "maxUsersPerDay")
 VALUES ('Stanford University', 'stanford.edu', 'university', true, '-1');
 ```
 
 ### Organization Settings
+
 - **Name**: Display name for the organization
 - **Domain**: Email domain for user verification (e.g., "stanford.edu")
 - **Type**: University or Company (for categorization)
@@ -471,21 +521,25 @@ VALUES ('Stanford University', 'stanford.edu', 'university', true, '-1');
 ### Key Files Modified/Created
 
 #### Authentication & Access Control
+
 - `app/(auth)/auth.ts` - Organization email verification
 - `lib/db/queries.ts` - Organization lookup functions
 - `lib/ai/user-entitlements.ts` - Unlimited access for org users
 - `middleware.ts` - Removed subscription-related middleware
 
 #### Database Schema
+
 - `lib/db/schema.ts` - Organization and admin tables
 - `lib/db/migrations/` - Database migration files
 
 #### UI Components
+
 - `components/org-signin-form.tsx` - Organization sign-in form
 - `components/admin/org-management.tsx` - Admin organization management
 - `app/dashboard/page.tsx` - Admin dashboard with org management
 
 #### Removed Components (Paywall System)
+
 - ~~`components/paywall-modal.tsx`~~ - Removed
 - ~~`components/subscription-dashboard.tsx`~~ - Removed
 - ~~`app/api/stripe/`~~ - All Stripe integration removed
@@ -496,7 +550,7 @@ VALUES ('Stanford University', 'stanford.edu', 'university', true, '-1');
 ```typescript
 // Check if email domain is from verified organization
 export async function isVerifiedOrgEmail(email: string): Promise<boolean> {
-  const domain = email.split('@')[1];
+  const domain = email.split("@")[1];
   if (!domain) return false;
 
   const organization = await getOrgByDomain(domain);
@@ -505,6 +559,7 @@ export async function isVerifiedOrgEmail(email: string): Promise<boolean> {
 ```
 
 ### Admin Permissions
+
 ```typescript
 // Admin check in components/pages
 const isAdmin = isAdminEmail(user.email);
@@ -519,18 +574,21 @@ if (isAdmin) {
 ## 🎯 User Experience
 
 ### For Organization Users
+
 1. **Sign In**: Visit platform and sign in with organization email
 2. **Immediate Access**: Get unlimited access to all AI models
 3. **No Restrictions**: No daily limits or premium features
 4. **Dashboard**: Simple dashboard showing account status
 
 ### For Super Admins
+
 1. **Organization Management**: Add/remove organizations
 2. **Analytics Dashboard**: View usage across all organizations
 3. **User Management**: Monitor user activity and access
 4. **Platform Settings**: Configure global platform settings
 
 ### For Organization Admins (Future)
+
 - View their organization's usage analytics
 - Manage organization-specific settings
 - Add/remove organization users (planned feature)
@@ -538,6 +596,7 @@ if (isAdmin) {
 ## 🔄 Migration from Paywall System
 
 ### What Was Removed
+
 - ✅ All Stripe payment integration
 - ✅ Subscription plans and user subscriptions
 - ✅ Paywall modal and limits
@@ -545,6 +604,7 @@ if (isAdmin) {
 - ✅ Registration page (users must exist in organizations)
 
 ### What Was Added
+
 - ✅ Organization database schema
 - ✅ Email domain verification
 - ✅ Admin organization management
@@ -552,6 +612,7 @@ if (isAdmin) {
 - ✅ Super admin dashboard
 
 ### Database Changes
+
 ```sql
 -- Added tables
 CREATE TABLE "Org" (...);
@@ -569,6 +630,7 @@ ALTER TABLE "User" ADD COLUMN "isVerified" boolean DEFAULT false;
 ## 🚀 Deployment Checklist
 
 ### Environment Variables
+
 ```env
 # Database
 POSTGRES_URL=postgresql://...
@@ -583,6 +645,7 @@ ANTHROPIC_API_KEY=your-anthropic-key
 ```
 
 ### Pre-Deployment Steps
+
 1. ✅ Configure super admin email in `lib/auth/admin.ts`
 2. ✅ Run database migrations
 3. ✅ Add initial organizations to database
@@ -590,6 +653,7 @@ ANTHROPIC_API_KEY=your-anthropic-key
 5. ✅ Verify admin dashboard access
 
 ### Post-Deployment
+
 1. Sign in as super admin
 2. Add organizations via admin dashboard
 3. Test user sign-in with organization emails
@@ -599,18 +663,21 @@ ANTHROPIC_API_KEY=your-anthropic-key
 ## 🎯 Business Benefits
 
 ### For Platform Owner
+
 - **Predictable Revenue**: Annual organization licenses
 - **Lower Support**: No individual billing issues
 - **Scalable**: Easy to add new organizations
 - **Enterprise Focus**: Target universities and companies
 
 ### For Organizations
+
 - **Unlimited Access**: No per-user limits
 - **Cost Effective**: One fee for entire organization
 - **Easy Management**: Users sign in with existing email
 - **No Individual Accounts**: No user management overhead
 
 ### For End Users
+
 - **Seamless Access**: Sign in with work/school email
 - **No Limits**: Unlimited requests and full features
 - **No Billing**: No individual payment required
@@ -628,16 +695,17 @@ The application supports multiple AI models with user-type-based access control.
 
 ### Model Configuration (`lib/ai/models.ts`)
 
-| Model ID | Model Name | Description | Provider | Use Case |
-|----------|------------|-------------|----------|----------|
-| `chat-model1` | Claude 4 Sonnet | Primary model | Anthropic | General conversations (Premium users) |
-| `chat-model2` | Claude Opus 4 | Most powerful model and slowest | Anthropic | Complex reasoning tasks |
-| `chat-model3` | Claude 3.5 Haiku | Fastest model | Anthropic | Quick responses (Guest default) |
-| `chat-model4` | Grok 4 | Grok 4 | xAI | Alternative perspective |
-| `chat-model-reasoning` | Reasoning Model | Uses advanced reasoning | Anthropic | Complex problem solving |
-| `chat-model-vision` | Claude 4 Sonnet | For prompts with images | Anthropic | Image analysis (auto-selected) |
+| Model ID               | Model Name       | Description                     | Provider  | Use Case                              |
+| ---------------------- | ---------------- | ------------------------------- | --------- | ------------------------------------- |
+| `chat-model1`          | Claude 4 Sonnet  | Primary model                   | Anthropic | General conversations (Premium users) |
+| `chat-model2`          | Claude Opus 4    | Most powerful model and slowest | Anthropic | Complex reasoning tasks               |
+| `chat-model3`          | Claude 3.5 Haiku | Fastest model                   | Anthropic | Quick responses (Guest default)       |
+| `chat-model4`          | Grok 4           | Grok 4                          | xAI       | Alternative perspective               |
+| `chat-model-reasoning` | Reasoning Model  | Uses advanced reasoning         | Anthropic | Complex problem solving               |
+| `chat-model-vision`    | Claude 4 Sonnet  | For prompts with images         | Anthropic | Image analysis (auto-selected)        |
 
 ### Specialized Models
+
 - **`title-model`**: Claude 3.5 Haiku - Used for generating chat titles
 - **`artifact-model`**: Claude 3.5 Sonnet - Used for creating documents/artifacts
 
@@ -645,12 +713,12 @@ The application supports multiple AI models with user-type-based access control.
 
 ### Model Entitlements (`lib/ai/entitlements.ts`)
 
-| User Type | Available Models | Default Model | Max Requests/Day |
-|-----------|------------------|---------------|------------------|
-| **Guest** | `chat-model3`, `chat-model-reasoning` | `chat-model3` | 5 |
-| **Free** | All models | `chat-model1` | 5 |
-| **Premium** | `chat-model1`, `chat-model-reasoning` | `chat-model1` | Unlimited |
-| **Admin** | `chat-model1`, `chat-model-reasoning` | `chat-model1` | Unlimited |
+| User Type   | Available Models                      | Default Model | Max Requests/Day |
+| ----------- | ------------------------------------- | ------------- | ---------------- |
+| **Guest**   | `chat-model3`, `chat-model-reasoning` | `chat-model3` | 5                |
+| **Free**    | All models                            | `chat-model1` | 5                |
+| **Premium** | `chat-model1`, `chat-model-reasoning` | `chat-model1` | Unlimited        |
+| **Admin**   | `chat-model1`, `chat-model-reasoning` | `chat-model1` | Unlimited        |
 
 ## 🔄 Model Selection Flow
 
@@ -658,7 +726,7 @@ The application supports multiple AI models with user-type-based access control.
 
 ```typescript
 // User's model preference is stored in browser cookie
-cookieStore.set('chat-model', selectedModelId);
+cookieStore.set("chat-model", selectedModelId);
 ```
 
 ### 2. Smart Default Selection (`getDefaultChatModelForUser`)
@@ -668,7 +736,7 @@ The system intelligently selects appropriate default models:
 ```typescript
 export function getDefaultChatModelForUser(
   userType: string,
-  entitlementsByUserType: any,
+  entitlementsByUserType: any
 ): string {
   // Returns first available model from user's entitlement list
   const userEntitlements = entitlementsByUserType[userType];
@@ -677,8 +745,9 @@ export function getDefaultChatModelForUser(
 ```
 
 **Results:**
+
 - 🔹 **Guest users** → `chat-model3` (Claude 3.5 Haiku)
-- 🔹 **Free users** → `chat-model1` (Claude 4 Sonnet)  
+- 🔹 **Free users** → `chat-model1` (Claude 4 Sonnet)
 - 🔹 **Premium users** → `chat-model1` (Claude 4 Sonnet)
 - 🔹 **Admin users** → `chat-model1` (Claude 4 Sonnet)
 
@@ -691,7 +760,8 @@ The system performs **3-layer validation** before using a saved model:
 const validModelIds = chatModels.map((m) => m.id);
 
 // 2. User has permission to access this model
-const userAvailableModels = entitlementsByUserType[userType]?.availableChatModelIds || [];
+const userAvailableModels =
+  entitlementsByUserType[userType]?.availableChatModelIds || [];
 
 // 3. All conditions met
 const isValidModelId =
@@ -710,30 +780,33 @@ const isValidModelId =
 
 ### Fallback Mechanisms
 
-| Scenario | Fallback Action |
-|----------|-----------------|
-| No cookie set | Use user-type default model |
-| Invalid model ID | Use user-type default model |
-| User lacks permission | Use user-type default model |
-| Unknown user type | Use guest default (`chat-model3`) |
+| Scenario              | Fallback Action                   |
+| --------------------- | --------------------------------- |
+| No cookie set         | Use user-type default model       |
+| Invalid model ID      | Use user-type default model       |
+| User lacks permission | Use user-type default model       |
+| Unknown user type     | Use guest default (`chat-model3`) |
 
 ## 🔧 Implementation Details
 
 ### Files Modified for Multi-Model Support
 
 #### Core Logic
+
 - **`lib/ai/models.ts`**: Model definitions and default selection logic
 - **`lib/ai/providers.ts`**: AI provider configuration with model mappings
 - **`lib/ai/entitlements.ts`**: User-type access control matrix
 - **`app/(chat)/actions.ts`**: Model validation in cookie saving
 
 #### Pages & Routes
+
 - **`app/(chat)/page.tsx`**: New chat model validation
-- **`app/(chat)/chat/[id]/page.tsx`**: Existing chat model validation  
+- **`app/(chat)/chat/[id]/page.tsx`**: Existing chat model validation
 - **`app/(chat)/api/chat/route.ts`**: Backend model selection and validation
 - **`app/(chat)/api/chat/schema.ts`**: API request validation schema
 
 #### UI Components
+
 - **`components/model-selector.tsx`**: Model selection dropdown
 - **`components/chat-header.tsx`**: Model display in header
 
@@ -741,12 +814,12 @@ const isValidModelId =
 
 ```typescript
 // 1. Validate selected model against user entitlements
-const userType = session?.user?.type || 'guest';
+const userType = session?.user?.type || "guest";
 const { availableChatModelIds } = entitlementsByUserType[userType];
 
 // 2. Auto-select vision model for image attachments
 const resolvedModelId = hasImageAttachment
-  ? 'chat-model-vision'
+  ? "chat-model-vision"
   : selectedChatModel;
 
 // 3. Use resolved model in AI provider
@@ -759,14 +832,18 @@ const result = streamText({
 ## 🎯 Special Features
 
 ### 1. Automatic Vision Model Selection
+
 When users upload images, the system automatically switches to `chat-model-vision` regardless of their selected model.
 
 ### 2. Reasoning Model Limitations
+
 The `chat-model-reasoning` model has specific limitations:
+
 - No access to tools (weather, documents, etc.)
 - Optimized for pure reasoning tasks
 
 ### 3. Context-Aware Model Usage
+
 - **Title Generation**: Always uses `title-model` (Claude 3.5 Haiku) for efficiency
 - **Document Creation**: Uses `artifact-model` (Claude 3.5 Sonnet) for structured content
 
@@ -777,6 +854,7 @@ The `chat-model-reasoning` model has specific limitations:
 If upgrading from a single-model setup:
 
 1. **Update Model IDs**: Change `'chat-model'` to `'chat-model1'` in:
+
    - `lib/ai/models.ts` (DEFAULT_CHAT_MODEL)
    - `lib/ai/entitlements.ts` (all user type configurations)
    - `app/(chat)/api/chat/schema.ts` (validation schema)
@@ -787,20 +865,23 @@ If upgrading from a single-model setup:
 ### Adding New Models
 
 1. **Add to Provider** (`lib/ai/providers.ts`):
+
    ```typescript
    'new-model-id': anthropic('claude-new-model'),
    ```
 
 2. **Add to Models List** (`lib/ai/models.ts`):
+
    ```typescript
    {
      id: 'new-model-id',
-     name: 'New Model Name', 
+     name: 'New Model Name',
      description: 'Model description',
    }
    ```
 
 3. **Update Entitlements** (`lib/ai/entitlements.ts`):
+
    ```typescript
    availableChatModelIds: ['existing-models', 'new-model-id'],
    ```
@@ -817,11 +898,13 @@ If upgrading from a single-model setup:
 
 ### Common Issues
 
-1. **Model Name Not Showing**: 
+1. **Model Name Not Showing**:
+
    - Clear browser cookies to reset invalid model IDs
    - Check user has access to the selected model
 
 2. **Access Denied Errors**:
+
    - Verify user type is correctly set in session
    - Check entitlements configuration matches user type
 
@@ -835,7 +918,7 @@ If upgrading from a single-model setup:
 # Check current model configuration
 grep -r "chat-model" lib/ai/
 
-# Verify entitlements setup  
+# Verify entitlements setup
 cat lib/ai/entitlements.ts
 
 # Test model validation
@@ -847,6 +930,7 @@ npx tsx scripts/test-model-validation.ts
 ### Known Issue: BuildKit "invalid file request" Error
 
 **Problem**: Docker BuildKit v0.27+ on Windows fails with:
+
 ```
 ERROR: failed to solve: invalid file request requirements.txt
 ```
@@ -858,10 +942,12 @@ ERROR: failed to solve: invalid file request requirements.txt
 The `docling-service/Dockerfile` uses `requirements-copy.txt` instead of `requirements.txt` to bypass the BuildKit bug.
 
 **Files in docling-service directory:**
+
 - `requirements.txt` - Original requirements file (keep this)
 - `requirements-copy.txt` - Copy used by Docker build (workaround)
 
 **Important**: When updating Python dependencies:
+
 1. Edit `requirements.txt` with your changes
 2. Copy it to `requirements-copy.txt`:
    ```bash
