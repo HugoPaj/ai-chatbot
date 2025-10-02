@@ -238,6 +238,34 @@ export function CitationsDisplay({ citations, highlightedCitationId, className }
     return null;
   }
 
+  // Group citations by filename while preserving original citation numbers
+  const groupedCitations: Citation[] = [];
+  const filenameMap = new Map<string, Citation>();
+
+  citations.forEach((citation) => {
+    const filename = citation.chunks[0]?.filename;
+    if (!filename) {
+      groupedCitations.push(citation);
+      return;
+    }
+
+    const existing = filenameMap.get(filename);
+    if (existing) {
+      // Merge chunks into existing citation, keep the lowest citation number
+      existing.chunks.push(...citation.chunks);
+    } else {
+      // Create new grouped citation
+      const grouped: Citation = {
+        ...citation,
+        chunks: [...citation.chunks],
+      };
+      filenameMap.set(filename, grouped);
+      groupedCitations.push(grouped);
+    }
+  });
+
+  const displayCitations = groupedCitations;
+
   return (
     <div className={cn('mt-4', className)}>
       <Card className="border border-border/50 bg-muted/30">
@@ -257,7 +285,7 @@ export function CitationsDisplay({ citations, highlightedCitationId, className }
             </div>
             <span className="text-sm text-muted-foreground">Citations</span>
             <Badge variant="secondary" className="ml-2 text-xs">
-              {citations.length}
+              {displayCitations.length}
             </Badge>
           </div>
         </Button>
@@ -265,7 +293,7 @@ export function CitationsDisplay({ citations, highlightedCitationId, className }
         {isExpanded && (
           <div className="px-4 pb-4 space-y-3">
             <Separator />
-            {citations.map((citation) => (
+            {displayCitations.map((citation) => (
               <CitationItem
                 key={citation.id}
                 citation={citation}

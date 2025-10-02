@@ -561,6 +561,17 @@ export async function POST(request: Request) {
                       messageParts = [{ type: 'text', text: '' }];
                     }
 
+                    // Add citations as a data part if available
+                    if (citations.length > 0) {
+                      messageParts.push({
+                        type: 'data',
+                        data: {
+                          type: 'citations',
+                          citations: citations,
+                        },
+                      } as any);
+                    }
+
                     /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
                     await saveMessages({
                       messages: [

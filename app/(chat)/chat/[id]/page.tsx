@@ -55,14 +55,18 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
           .map((part) => part.text || '')
           .join('\n') || '';
 
-      // Ensure parts array has valid structure
+      // Ensure parts array has valid structure - only add text to text parts
       const validParts =
-        (message.parts as Array<{ type: string; text?: string }>)?.map(
-          (part) => ({
-            ...part,
-            text: part.text || '', // Ensure text is always a string
-          }),
-        ) || [];
+        (message.parts as Array<any>)?.map((part) => {
+          if (part.type === 'text') {
+            return {
+              ...part,
+              text: part.text || '', // Ensure text is always a string
+            };
+          }
+          // Keep data parts and other part types as-is
+          return part;
+        }) || [];
 
       const result: any = {
         id: message.id,
@@ -89,6 +93,21 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
       return result;
     });
   }
+
+  // Extract citations from messages for initial load
+  // Keep ungrouped to match inline citation numbers [1], [2], etc. in the text
+  const initialCitations = messagesFromDb
+    .filter((msg) => msg.role === 'assistant')
+    .flatMap((msg) => {
+      const parts = msg.parts as Array<any>;
+      const citationPart = parts?.find(
+        (part) =>
+          part.type === 'data' &&
+          part.data?.type === 'citations' &&
+          Array.isArray(part.data?.citations)
+      );
+      return citationPart?.data?.citations || [];
+    });
 
   const cookieStore = await cookies();
   const chatModelFromCookie = cookieStore.get('chat-model');
@@ -120,7 +139,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
           session={session}
           autoResume={shouldAutoResume}
         />
-        <DataStreamHandler id={id} />
+        <DataStreamHandler id={id} initialCitations={initialCitations} />
       </>
     );
   }
@@ -136,7 +155,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
         session={session}
         autoResume={shouldAutoResume}
       />
-      <DataStreamHandler id={id} />
+      <DataStreamHandler id={id} initialCitations={initialCitations} />
     </>
   );
 }

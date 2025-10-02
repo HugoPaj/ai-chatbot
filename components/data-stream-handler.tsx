@@ -4,6 +4,8 @@
 import { useEffect, useRef } from 'react';
 // import { artifactDefinitions, type ArtifactKind } from './artifact'; // Disabled for AI SDK v5 migration
 import type { Suggestion } from '@/lib/db/schema';
+import type { Citation } from '@/lib/types';
+import { setGlobalCitations } from '@/hooks/use-sources';
 // import { initialArtifactData, useArtifact } from '@/hooks/use-artifact'; // Disabled for AI SDK v5 migration
 
 export type DataStreamDelta = {
@@ -23,11 +25,18 @@ export type DataStreamDelta = {
   content: string | Suggestion;
 };
 
-export function DataStreamHandler({ id }: { id: string }) {
+export function DataStreamHandler({ id, initialCitations }: { id: string; initialCitations?: Citation[] }) {
   // In AI SDK v5, data streaming is handled differently
   // Most data stream handling is now done in individual hooks like useSources
   // This component is kept minimal for potential future data stream handling
   const lastProcessedIndex = useRef(-1);
+
+  useEffect(() => {
+    // Set initial citations from database when component mounts
+    if (initialCitations && initialCitations.length > 0) {
+      setGlobalCitations(id, initialCitations);
+    }
+  }, [id, initialCitations]);
 
   useEffect(() => {
     // Data stream handling is now distributed to specific hooks
