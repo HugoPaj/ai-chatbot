@@ -39,16 +39,16 @@ export async function GET(
     return Response.json({
       job_id: job.id,
       status: job.status,
-      progress: parseInt(job.progress),
+      progress: Number.parseInt(job.progress),
       message: job.message,
       error: job.errorMessage,
       filename: job.filename,
       // Include results when completed
       ...(job.status === 'completed' && {
         result: {
-          chunks: parseInt(job.chunksCount || '0'),
-          total_pages: parseInt(job.totalPages || '0'),
-          processing_time: parseInt(job.processingTimeMs || '0'),
+          chunks: Number.parseInt(job.chunksCount || '0'),
+          total_pages: Number.parseInt(job.totalPages || '0'),
+          processing_time: Number.parseInt(job.processingTimeMs || '0'),
         },
       }),
       created_at: job.createdAt,

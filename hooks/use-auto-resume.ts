@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { UIMessage } from 'ai';
 
 export interface UseAutoResumeParams {
@@ -18,26 +18,25 @@ export function useAutoResume({
   resumeStream,
   setMessages,
 }: UseAutoResumeParams) {
+  const hasResumed = useRef(false);
+
   useEffect(() => {
-    if (!autoResume) return;
+    // Only resume once per chat session
+    if (!autoResume || hasResumed.current) return;
 
     // Wait for messages to be properly loaded
     if (!initialMessages || initialMessages.length === 0) {
       return;
     }
 
-    const mostRecentMessage = initialMessages.at(-1);
+    // Resume stream after messages are loaded
+    hasResumed.current = true;
+    const timeoutId = setTimeout(() => {
+      void resumeStream();
+    }, 100);
 
-    if (mostRecentMessage?.role === 'user') {
-      // Add a small delay to ensure the messages state is fully initialized
-      const timeoutId = setTimeout(() => {
-        void resumeStream();
-      }, 100);
-
-      return () => clearTimeout(timeoutId);
-    }
-
-    // we intentionally run this once per message array change
+    return () => clearTimeout(timeoutId);
+    // Only run when autoResume flag changes (once per load)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoResume, initialMessages.length]);
+  }, [autoResume]);
 }

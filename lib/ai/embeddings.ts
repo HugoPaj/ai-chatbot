@@ -19,6 +19,7 @@ export type MultimodalInput =
       image: string; // Base64 encoded image
     };
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Legacy service pattern, refactoring to namespace would be breaking change
 export class EmbeddingService {
   private static readonly API_URL =
     'https://api.voyageai.com/v1/multimodalembeddings';
@@ -201,6 +202,7 @@ export class EmbeddingService {
     // Remove control characters and problematic Unicode
     const cleaned = text
       // Remove null bytes and control characters (except tabs and newlines)
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally removing control characters from text
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
       // Remove private use Unicode characters that cause API issues
       .replace(/[\uE000-\uF8FF]/g, '') // Private Use Area

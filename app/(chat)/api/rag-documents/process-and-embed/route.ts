@@ -6,6 +6,7 @@ import { writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { generateUUID } from '@/lib/utils';
+import type { DocumentChunk } from '@/lib/types';
 
 /**
  * API endpoint to process documents using the full document processor flow
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
     console.log('[Process & Embed] 🔄 Starting document processing...');
     console.log(`[Process & Embed] 📝 Original filename: ${file.name}`);
 
-    let chunks;
+    let chunks: DocumentChunk[];
     if (file.type === 'application/pdf') {
       console.log('[Process & Embed] 📖 Processing as PDF...');
       chunks = await DocumentProcessor.processPDF(

@@ -40,11 +40,8 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
     id,
   });
 
-  // Determine if auto-resume should be enabled
-  // Only enable if the last message is from user AND there's no corresponding assistant response
-  const shouldAutoResume =
-    messagesFromDb.length > 0 &&
-    messagesFromDb[messagesFromDb.length - 1]?.role === 'user';
+  // Auto-resume is disabled - Redis handles stream resumption automatically
+  const shouldAutoResume = false;
 
   function convertToUIMessages(messages: Array<DBMessage>): Array<any> {
     return messages.map((message) => {

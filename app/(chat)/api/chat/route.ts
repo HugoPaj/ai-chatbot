@@ -30,7 +30,7 @@ import {
   incrementDailyUsage,
 } from '@/lib/db/queries';
 import { canUserMakeRequest } from '@/lib/ai/user-entitlements';
-import { generateUUID, getTrailingMessageId } from '@/lib/utils';
+import { generateUUID, } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
 import { createDocument } from '@/lib/ai/tools/create-document';
 import { updateDocument } from '@/lib/ai/tools/update-document';
@@ -179,28 +179,10 @@ export async function POST(request: Request) {
       country,
     };
 
-    // Run user message saving and stream setup in parallel
+    // Run stream setup and usage tracking in parallel
+    // Note: Messages are now saved in onFinish callback to ensure all messages are persisted together
     const streamId = generateUUID();
-    /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
     await Promise.all([
-      saveMessages({
-        messages: [
-          {
-            chatId: id,
-            id: message.id,
-            role: 'user',
-            parts: message.parts || [
-              { type: 'text', text: (message as any).content || '' },
-            ],
-            attachments: Array.isArray(
-              (message as any).experimental_attachments,
-            )
-              ? (message as any).experimental_attachments
-              : [],
-            createdAt: new Date(),
-          },
-        ],
-      }),
       incrementDailyUsage({
         userId: session.user.id,
         date: today,
@@ -491,110 +473,58 @@ export async function POST(request: Request) {
           },
 
           onFinish: async ({ response }) => {
-            // Save assistant response asynchronously without blocking
+            // Save ALL messages (both user and assistant) asynchronously
             if (session.user?.id) {
               setImmediate(async () => {
                 try {
-                  const assistantMessages = response.messages.filter(
-                    (message) => message.role === 'assistant',
-                  );
+                  // Get all messages from response (includes both user and assistant)
+                  const allMessages = response.messages;
 
-                  let assistantId = getTrailingMessageId({
-                    // @ts-expect-error: response.messages type mismatch with ResponseMessage[] in v5
-                    messages: assistantMessages,
-                  });
+                  // Convert and save all messages
+                  const messagesToSave = allMessages.map((msg: any) => {
+                    let parts: Array<any>;
 
-                  // Generate a new ID if one doesn't exist
-                  if (!assistantId) {
-                    assistantId = generateUUID();
-                  }
-
-                  const assistantMessage = response.messages.find(
-                    (m) => m.role === 'assistant',
-                  ) as UIMessage | undefined;
-
-                  if (assistantMessage) {
-                    // Handle AI SDK v5 content structure - content might be an array of parts
-                    let messageParts: Array<{ type: string; text: string }>;
-                    const rawContent = (assistantMessage as any).content;
-
-                    if (
-                      assistantMessage.parts &&
-                      Array.isArray(assistantMessage.parts) &&
-                      assistantMessage.parts.length > 0
-                    ) {
-                      // Use existing parts if available, but filter and convert to expected format
-                      messageParts = assistantMessage.parts
-                        .map((part: any) => {
-                          if (
-                            part.type === 'text' &&
-                            typeof part.text === 'string'
-                          ) {
-                            return { type: 'text', text: part.text };
-                          }
-                          // Handle other part types that might not have text
-                          if (
-                            part.type === 'dynamic-tool' ||
-                            part.type === 'tool-call'
-                          ) {
-                            return { type: part.type, text: '' };
-                          }
-                          // Fallback for unknown part types
-                          return {
-                            type: part.type || 'text',
-                            text: part.text || '',
-                          };
-                        })
-                        .filter(
-                          (part): part is { type: string; text: string } =>
-                            typeof part.type === 'string' &&
-                            typeof part.text === 'string',
-                        );
-                    } else if (Array.isArray(rawContent)) {
-                      // Content is an array (AI SDK v5 format) - convert to parts
-                      messageParts = rawContent.map((item: any) => ({
-                        type: item.type || 'text',
-                        text: item.text || '',
-                      }));
-                    } else if (typeof rawContent === 'string') {
-                      // Content is a string - wrap in text part
-                      messageParts = [{ type: 'text', text: rawContent }];
+                    // Handle parts based on message structure
+                    if (msg.parts && Array.isArray(msg.parts)) {
+                      parts = msg.parts;
+                    } else if (msg.content) {
+                      // Fallback to content if parts not available
+                      if (typeof msg.content === 'string') {
+                        parts = [{ type: 'text', text: msg.content }];
+                      } else if (Array.isArray(msg.content)) {
+                        parts = msg.content;
+                      } else {
+                        parts = [{ type: 'text', text: '' }];
+                      }
                     } else {
-                      // Fallback for unknown format
-                      messageParts = [{ type: 'text', text: '' }];
+                      parts = [{ type: 'text', text: '' }];
                     }
 
-                    // Add citations as a data part if available
-                    if (citations.length > 0) {
-                      messageParts.push({
+                    // Add citations to assistant messages if available
+                    if (msg.role === 'assistant' && citations.length > 0) {
+                      parts = [...parts, {
                         type: 'data',
                         data: {
                           type: 'citations',
                           citations: citations,
                         },
-                      } as any);
+                      }];
                     }
 
-                    /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
-                    await saveMessages({
-                      messages: [
-                        {
-                          id: assistantId,
-                          chatId: id,
-                          role: assistantMessage.role,
-                          parts: messageParts,
-                          attachments: Array.isArray(
-                            (assistantMessage as any).experimental_attachments,
-                          )
-                            ? (assistantMessage as any).experimental_attachments
-                            : [],
-                          createdAt: new Date(),
-                        },
-                      ],
-                    });
-                  }
+                    return {
+                      id: msg.id || generateUUID(),
+                      chatId: id,
+                      role: msg.role,
+                      parts,
+                      attachments: msg.attachments || [],
+                      createdAt: new Date(),
+                    };
+                  });
+
+                  await saveMessages({ messages: messagesToSave });
+                  console.log(`Saved ${messagesToSave.length} messages to database`);
                 } catch (error) {
-                  console.error('Failed to save assistant message:', error);
+                  console.error('Failed to save messages:', error);
                 }
               });
             }

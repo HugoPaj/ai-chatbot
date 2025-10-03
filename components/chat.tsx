@@ -115,6 +115,7 @@ export function Chat({
   const { messages, setMessages, status, stop, sendMessage, regenerate } =
     useChat({
       id,
+      messages: initialMessages, // Load initial messages from database
       experimental_throttle: 16,
       generateId: generateUUID,
       // Dynamically import to avoid ESM type issues
@@ -188,13 +189,6 @@ export function Chat({
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const isArtifactVisible = useArtifactSelector((state) => state.isVisible);
-
-  // Initialize messages from database on component mount
-  useEffect(() => {
-    if (initialMessages.length > 0 && messages.length === 0) {
-      setMessages(initialMessages);
-    }
-  }, [initialMessages, messages.length, setMessages]);
 
   useAutoResume({
     autoResume,
