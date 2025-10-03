@@ -57,8 +57,8 @@ function PureMultimodalInput({
   setMessages: (
     messages: UIMessage[] | ((messages: UIMessage[]) => UIMessage[]),
   ) => void;
-  append: (message: { role: 'user'; content: string }) => void;
-  onSubmit: (params: { attachments: Array<Attachment> }) => void;
+  append: (message: { role: 'user'; content: string }, attachments?: Array<Attachment>) => void;
+  onSubmit: (params?: { attachments?: Array<Attachment> }) => void;
   className?: string;
   selectedVisibilityType: VisibilityType;
 }) {

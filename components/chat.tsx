@@ -154,15 +154,23 @@ export function Chat({
 
   const [input, setInput] = useState('');
   const append = useCallback(
-    (m: { role: 'user'; content: string }) => {
+    (m: { role: 'user'; content: string }, attachments?: Array<Attachment>) => {
       setInput('');
-      void sendMessage({ text: m.content });
+      void sendMessage({
+        text: m.content,
+        files: attachments?.map(att => ({
+          type: 'file' as const,
+          data: att.url,
+          mediaType: att.contentType,
+          url: att.url
+        }))
+      });
     },
     [sendMessage],
   );
-  const handleSubmit = () => {
+  const handleSubmit = (params?: { attachments?: Array<Attachment> }) => {
     if (!input.trim()) return;
-    append({ role: 'user', content: input });
+    append({ role: 'user', content: input }, params?.attachments);
   };
 
   const searchParams = useSearchParams();
