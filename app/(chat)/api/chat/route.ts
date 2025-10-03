@@ -20,7 +20,6 @@ import {
 } from '@/lib/ai/citation-generator';
 import { VectorStore } from '@/lib/ai/vectorStore';
 import {
-  createStreamId,
   deleteChatById,
   getChatById,
   getMessagesByChatId,
@@ -30,7 +29,7 @@ import {
   incrementDailyUsage,
 } from '@/lib/db/queries';
 import { canUserMakeRequest } from '@/lib/ai/user-entitlements';
-import { generateUUID, } from '@/lib/utils';
+import { generateUUID } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
 import { createDocument } from '@/lib/ai/tools/create-document';
 import { updateDocument } from '@/lib/ai/tools/update-document';
@@ -41,49 +40,9 @@ import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 import { postRequestBodySchema, type PostRequestBody } from './schema';
 import { geolocation } from '@vercel/functions';
-import {
-  createResumableStreamContext,
-  type ResumableStreamContext,
-} from 'resumable-stream';
-import { after } from 'next/server';
 import { ChatSDKError } from '@/lib/errors';
 
 export const maxDuration = 300;
-
-import redis from '@/lib/redis';
-
-let globalStreamContext: ResumableStreamContext | null = null;
-
-function getStreamContext() {
-  if (!globalStreamContext) {
-    try {
-      const redisStorage = {
-        async get(key: string) {
-          const value = await redis.get(key);
-          return value ? JSON.parse(value) : null;
-        },
-        async set(key: string, value: any) {
-          await redis.set(key, JSON.stringify(value), 'EX', 3600); // 1 hour expiry
-        },
-        async delete(key: string) {
-          await redis.del(key);
-        },
-      };
-
-      globalStreamContext = createResumableStreamContext({
-        waitUntil: after,
-        // @ts-ignore - storage is a valid option but types are not updated
-        storage: redisStorage,
-      });
-    } catch (error: any) {
-      console.error('Redis initialization error:', error);
-      // Fallback to non-resumable stream
-      return null;
-    }
-  }
-
-  return globalStreamContext;
-}
 
 export async function POST(request: Request) {
   let requestBody: PostRequestBody;
@@ -179,23 +138,40 @@ export async function POST(request: Request) {
       country,
     };
 
-    // Run stream setup and usage tracking in parallel
-    // Note: Messages are now saved in onFinish callback to ensure all messages are persisted together
-    const streamId = generateUUID();
-    await Promise.all([
-      incrementDailyUsage({
-        userId: session.user.id,
-        date: today,
-      }),
-      createStreamId({ streamId, chatId: id }),
-    ]);
+    // Increment daily usage tracking
+    await incrementDailyUsage({
+      userId: session.user.id,
+      date: today,
+    });
+
+    // Save the user message immediately before streaming
+    try {
+      await saveMessages({
+        messages: [
+          {
+            id: message.id,
+            chatId: id,
+            role: message.role,
+            parts: message.parts,
+            attachments: [],
+            createdAt: new Date(),
+          },
+        ],
+      });
+      console.log('Saved user message to database');
+    } catch (error) {
+      console.error('Failed to save user message:', error);
+    }
+
+    // Define citations at higher scope so it's accessible in onFinish callback
+    let citations: any[] = [];
 
     const stream = createUIMessageStream<UIMessage>({
+      generateId: generateUUID,
       execute: async ({ writer }) => {
         // Start streaming immediately while preparing context in background
         let documentContext = '';
         let documentSources: string[] = [];
-        let citations: any[] = [];
 
         // Extract user message text for async processing
         const userMessageText =
@@ -215,7 +191,8 @@ export async function POST(request: Request) {
 
           // Check for file parts with images
           const fileParts = message.parts.filter(
-            (part: any) => part.type === 'file' && part.mediaType?.startsWith('image/')
+            (part: any) =>
+              part.type === 'file' && part.mediaType?.startsWith('image/'),
           );
 
           if (fileParts.length > 0) {
@@ -324,11 +301,12 @@ export async function POST(request: Request) {
                   score: doc.score.toFixed(3),
                   file: doc.metadata.filename,
                   page: doc.metadata.page ?? 'N/A',
-                  hasRelatedImages: !!(doc.metadata.relatedImageUrls && (
-                    typeof doc.metadata.relatedImageUrls === 'string'
+                  hasRelatedImages: !!(
+                    doc.metadata.relatedImageUrls &&
+                    (typeof doc.metadata.relatedImageUrls === 'string'
                       ? JSON.parse(doc.metadata.relatedImageUrls).length > 0
-                      : doc.metadata.relatedImageUrls.length > 0
-                  )),
+                      : doc.metadata.relatedImageUrls.length > 0)
+                  ),
                 })),
               );
             }
@@ -363,7 +341,7 @@ export async function POST(request: Request) {
                   '[VectorStore] Image results details:',
                   imageResults.map((doc) => ({
                     score: doc.score,
-                    hasRelatedImages: !!(doc.metadata.relatedImageUrls),
+                    hasRelatedImages: !!doc.metadata.relatedImageUrls,
                     content: doc.metadata.content?.substring(0, 100),
                   })),
                 );
@@ -406,9 +384,10 @@ export async function POST(request: Request) {
 
         // Decide whether to use a vision-capable model based on file parts
         const hasImageAttachment = Boolean(
-          message.parts.some((part: any) =>
-            part.type === 'file' && part.mediaType?.startsWith('image/')
-          )
+          message.parts.some(
+            (part: any) =>
+              part.type === 'file' && part.mediaType?.startsWith('image/'),
+          ),
         );
 
         const resolvedModelId = hasImageAttachment
@@ -467,63 +446,7 @@ export async function POST(request: Request) {
             generateImage: generateImage({ session }),
           },
 
-          onFinish: async ({ response }) => {
-            // Save ALL messages (both user and assistant) asynchronously
-            if (session.user?.id) {
-              setImmediate(async () => {
-                try {
-                  // Get all messages from response (includes both user and assistant)
-                  const allMessages = response.messages;
-
-                  // Convert and save all messages
-                  const messagesToSave = allMessages.map((msg: any) => {
-                    let parts: Array<any>;
-
-                    // Handle parts based on message structure
-                    if (msg.parts && Array.isArray(msg.parts)) {
-                      parts = msg.parts;
-                    } else if (msg.content) {
-                      // Fallback to content if parts not available
-                      if (typeof msg.content === 'string') {
-                        parts = [{ type: 'text', text: msg.content }];
-                      } else if (Array.isArray(msg.content)) {
-                        parts = msg.content;
-                      } else {
-                        parts = [{ type: 'text', text: '' }];
-                      }
-                    } else {
-                      parts = [{ type: 'text', text: '' }];
-                    }
-
-                    // Add citations to assistant messages if available
-                    if (msg.role === 'assistant' && citations.length > 0) {
-                      parts = [...parts, {
-                        type: 'data',
-                        data: {
-                          type: 'citations',
-                          citations: citations,
-                        },
-                      }];
-                    }
-
-                    return {
-                      id: msg.id || generateUUID(),
-                      chatId: id,
-                      role: msg.role,
-                      parts,
-                      attachments: msg.attachments || [],
-                      createdAt: new Date(),
-                    };
-                  });
-
-                  await saveMessages({ messages: messagesToSave });
-                  console.log(`Saved ${messagesToSave.length} messages to database`);
-                } catch (error) {
-                  console.error('Failed to save messages:', error);
-                }
-              });
-            }
-
+          onFinish: async () => {
             // Send citations data after the response is complete
             if (citations.length > 0) {
               console.log(
@@ -550,12 +473,74 @@ export async function POST(request: Request) {
         // Properly merge the streamText result into the UI message stream
         writer.merge(result.toUIMessageStream());
       },
+      onFinish: async ({ messages: allMessages }) => {
+        // Save only ASSISTANT messages to database (user message already saved)
+        if (session.user?.id) {
+          try {
+            // Filter to only save assistant messages (user message was saved before stream)
+            const assistantMessages = allMessages.filter(
+              (msg: any) => msg.role === 'assistant',
+            );
+
+            const messagesToSave = assistantMessages.map((msg: any) => {
+              let parts: Array<any>;
+
+              // Handle parts based on message structure
+              if (msg.parts && Array.isArray(msg.parts)) {
+                parts = msg.parts;
+              } else if (msg.content) {
+                // Fallback to content if parts not available
+                if (typeof msg.content === 'string') {
+                  parts = [{ type: 'text', text: msg.content }];
+                } else if (Array.isArray(msg.content)) {
+                  parts = msg.content;
+                } else {
+                  parts = [{ type: 'text', text: '' }];
+                }
+              } else {
+                parts = [{ type: 'text', text: '' }];
+              }
+
+              // Add citations to assistant messages if available
+              if (citations.length > 0) {
+                parts = [
+                  ...parts,
+                  {
+                    type: 'data',
+                    data: {
+                      type: 'citations',
+                      citations: citations,
+                    },
+                  },
+                ];
+              }
+
+              return {
+                id: msg.id,
+                chatId: id,
+                role: msg.role,
+                parts,
+                attachments: msg.attachments || [],
+                createdAt: new Date(),
+              };
+            });
+
+            if (messagesToSave.length > 0) {
+              await saveMessages({ messages: messagesToSave });
+              console.log(
+                `Saved ${messagesToSave.length} assistant message(s) to database`,
+              );
+            }
+          } catch (error) {
+            console.error('Failed to save assistant messages:', error);
+          }
+        }
+      },
       onError: () => {
         return 'Oops, an error occurred!';
       },
     });
 
-    // Return direct stream response
     return createUIMessageStreamResponse({ stream });
   } catch (error) {
     if (error instanceof ChatSDKError) {
