@@ -156,14 +156,28 @@ export function Chat({
   const append = useCallback(
     (m: { role: 'user'; content: string }, attachments?: Array<Attachment>) => {
       setInput('');
+
+      const parts: Array<any> = [];
+
+      // Add file parts first (if any)
+      if (attachments && attachments.length > 0) {
+        parts.push(...attachments.map(att => ({
+          type: 'file',
+          url: att.url,
+          name: att.name,
+          mediaType: att.contentType
+        })));
+      }
+
+      // Add text part
+      parts.push({
+        type: 'text',
+        text: m.content
+      });
+
       void sendMessage({
-        text: m.content,
-        files: attachments?.map(att => ({
-          type: 'file' as const,
-          data: att.url,
-          mediaType: att.contentType,
-          url: att.url
-        }))
+        role: 'user' as const,
+        parts
       });
     },
     [sendMessage],
@@ -242,7 +256,7 @@ export function Chat({
               initialMessages={initialMessages}
               setMessages={setMessages}
               append={append}
-              onSubmit={() => handleSubmit()}
+              onSubmit={handleSubmit}
               selectedVisibilityType={visibilityType}
             />
           )}

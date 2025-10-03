@@ -57,7 +57,10 @@ const PurePreviewMessage = ({
     setTimeout(() => setHighlightedCitationId(undefined), 3000);
   };
 
-  /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
+  const attachmentsFromMessage = message.parts?.filter(
+    (part: any) => part.type === 'file'
+  ) || [];
+
   return (
     <AnimatePresence>
       <motion.div
@@ -89,17 +92,20 @@ const PurePreviewMessage = ({
               'min-h-96': message.role === 'assistant' && requiresScrollPadding,
             })}
           >
-            {(message as any).experimental_attachments &&
-              (message as any).experimental_attachments.length > 0 && (
+            {attachmentsFromMessage.length > 0 && (
                 <div
                   data-testid={`message-attachments`}
                   className="flex flex-row justify-end gap-2"
                 >
-                  {(message as any).experimental_attachments.map(
-                    (attachment: Attachment) => (
+                  {attachmentsFromMessage.map(
+                    (attachment: any) => (
                       <PreviewAttachment
                         key={attachment.url}
-                        attachment={attachment}
+                        attachment={{
+                          url: attachment.url,
+                          name: attachment.name || 'file',
+                          contentType: attachment.mediaType
+                        }}
                       />
                     ),
                   )}

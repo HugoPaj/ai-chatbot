@@ -213,49 +213,45 @@ export async function POST(request: Request) {
           // Attempt an image-based similarity search first if the user provided image attachments
           let similarDocs: SearchResult[] = [];
 
-          /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
-          if (
-            message.experimental_attachments &&
-            message.experimental_attachments.length > 0
-          ) {
-            /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
-            const firstImage = message.experimental_attachments.find((att) =>
-              att.contentType.startsWith('image/'),
-            );
+          // Check for file parts with images
+          const fileParts = message.parts.filter(
+            (part: any) => part.type === 'file' && part.mediaType?.startsWith('image/')
+          );
 
-            if (firstImage) {
-              try {
-                console.log(
-                  `[VectorStore] Detected image attachment (${firstImage.name}). Performing image similarity search…`,
-                );
+          if (fileParts.length > 0) {
+            const firstImage = fileParts[0] as any;
 
-                const imageResponse = await fetch(firstImage.url);
+            try {
+              console.log(
+                `[VectorStore] Detected image attachment (${firstImage.name}). Performing image similarity search…`,
+              );
 
-                if (!imageResponse.ok) {
-                  throw new Error(
-                    `Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`,
-                  );
-                }
+              const imageResponse = await fetch(firstImage.url);
 
-                const imageBuffer = Buffer.from(
-                  await imageResponse.arrayBuffer(),
-                );
-                const imageBase64 = imageBuffer.toString('base64');
-
-                similarDocs = await vectorStore.searchSimilarByImage(
-                  imageBase64,
-                  100,
-                );
-
-                console.log(
-                  `[VectorStore] Retrieved ${similarDocs.length} document(s) from image search`,
-                );
-              } catch (error) {
-                console.error(
-                  '[VectorStore] Image similarity search failed, falling back to text search:',
-                  error,
+              if (!imageResponse.ok) {
+                throw new Error(
+                  `Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`,
                 );
               }
+
+              const imageBuffer = Buffer.from(
+                await imageResponse.arrayBuffer(),
+              );
+              const imageBase64 = imageBuffer.toString('base64');
+
+              similarDocs = await vectorStore.searchSimilarByImage(
+                imageBase64,
+                100,
+              );
+
+              console.log(
+                `[VectorStore] Retrieved ${similarDocs.length} document(s) from image search`,
+              );
+            } catch (error) {
+              console.error(
+                '[VectorStore] Image similarity search failed, falling back to text search:',
+                error,
+              );
             }
           }
 
@@ -408,12 +404,11 @@ export async function POST(request: Request) {
           );
         }
 
-        // Decide whether to use a vision-capable model based on attachments
-        /* FIXME(@ai-sdk-upgrade-v5): The `experimental_attachments` property has been replaced with the parts array. Please manually migrate following https://ai-sdk.dev/docs/migration-guides/migration-guide-5-0#attachments--file-parts */
+        // Decide whether to use a vision-capable model based on file parts
         const hasImageAttachment = Boolean(
-          message.experimental_attachments?.some((att) =>
-            att.contentType.startsWith('image/'),
-          ),
+          message.parts.some((part: any) =>
+            part.type === 'file' && part.mediaType?.startsWith('image/')
+          )
         );
 
         const resolvedModelId = hasImageAttachment
