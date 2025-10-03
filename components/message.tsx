@@ -48,7 +48,9 @@ const PurePreviewMessage = ({
   requiresScrollPadding: boolean;
 }) => {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
-  const [highlightedCitationId, setHighlightedCitationId] = useState<string | undefined>();
+  const [highlightedCitationId, setHighlightedCitationId] = useState<
+    string | undefined
+  >();
   const { sources, citations } = useSources({ chatId });
 
   const handleCitationClick = (citation: Citation) => {
@@ -57,9 +59,8 @@ const PurePreviewMessage = ({
     setTimeout(() => setHighlightedCitationId(undefined), 3000);
   };
 
-  const attachmentsFromMessage = message.parts?.filter(
-    (part: any) => part.type === 'file'
-  ) || [];
+  const attachmentsFromMessage =
+    message.parts?.filter((part: any) => part.type === 'file') || [];
 
   return (
     <AnimatePresence>
@@ -93,35 +94,36 @@ const PurePreviewMessage = ({
             })}
           >
             {attachmentsFromMessage.length > 0 && (
-                <div
-                  data-testid={`message-attachments`}
-                  className="flex flex-row justify-end gap-2"
-                >
-                  {attachmentsFromMessage.map(
-                    (attachment: any) => (
-                      <PreviewAttachment
-                        key={attachment.url}
-                        attachment={{
-                          url: attachment.url,
-                          name: attachment.name || 'file',
-                          contentType: attachment.mediaType
-                        }}
-                      />
-                    ),
-                  )}
-                </div>
-              )}
+              <div
+                data-testid={`message-attachments`}
+                className="flex flex-row justify-end gap-2"
+              >
+                {attachmentsFromMessage.map((attachment: any) => (
+                  <PreviewAttachment
+                    key={attachment.url}
+                    attachment={{
+                      url: attachment.url,
+                      name: attachment.name || 'file',
+                      contentType: attachment.mediaType,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
 
             {message.parts?.map((part, index) => {
               const { type } = part;
               const key = `message-${message.id}-part-${index}`;
 
-              if (type === 'reasoning') {
+              if (
+                type === 'reasoning' &&
+                (part as any).text?.trim().length > 0
+              ) {
                 return (
                   <MessageReasoning
                     key={key}
                     isLoading={isLoading}
-                    reasoningText={(part as any).text}
+                    reasoning={(part as any).text}
                   />
                 );
               }
@@ -155,7 +157,8 @@ const PurePreviewMessage = ({
                             message.role === 'user',
                         })}
                       >
-                        {message.role === 'assistant' && citations.length > 0 ? (
+                        {message.role === 'assistant' &&
+                        citations.length > 0 ? (
                           <MarkdownWithCitations
                             citations={citations}
                             onCitationClick={handleCitationClick}

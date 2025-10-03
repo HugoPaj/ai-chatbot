@@ -446,6 +446,15 @@ export async function POST(request: Request) {
             generateImage: generateImage({ session }),
           },
 
+          // Enable reasoning for reasoning model
+          ...(selectedChatModel === 'chat-model-reasoning' && {
+            providerOptions: {
+              anthropic: {
+                thinking: { type: 'enabled', budgetTokens: 10000 },
+              },
+            },
+          }),
+
           onFinish: async () => {
             // Send citations data after the response is complete
             if (citations.length > 0) {
@@ -470,8 +479,9 @@ export async function POST(request: Request) {
           },
         });
 
-        // Properly merge the streamText result into the UI message stream
-        writer.merge(result.toUIMessageStream());
+        // Consume the stream first, then merge into UI message stream
+        result.consumeStream();
+        writer.merge(result.toUIMessageStream({ sendReasoning: true }));
       },
       onFinish: async ({ messages: allMessages }) => {
         // Save only ASSISTANT messages to database (user message already saved)

@@ -7,12 +7,12 @@ import { Markdown } from './markdown';
 
 interface MessageReasoningProps {
   isLoading: boolean;
-  reasoningText: string;
+  reasoning: string;
 }
 
 export function MessageReasoning({
   isLoading,
-  reasoningText,
+  reasoning,
 }: MessageReasoningProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -69,7 +69,7 @@ export function MessageReasoning({
             style={{ overflow: 'hidden' }}
             className="pl-4 text-zinc-600 dark:text-zinc-400 border-l flex flex-col gap-4"
           >
-            <Markdown>{reasoningText}</Markdown>
+            <Markdown>{reasoning}</Markdown>
           </motion.div>
         )}
       </AnimatePresence>
