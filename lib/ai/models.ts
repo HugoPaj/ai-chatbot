@@ -52,13 +52,8 @@ export const chatModels: Array<ChatModel> = [
     description: 'Most advanced OpenAI model',
   },
   {
-    id: 'chat-model6',
-    name: 'GPT-5',
-    description: 'Next-generation OpenAI model',
-  },
-  {
     id: 'chat-model-reasoning',
-    name: 'Claude 3.7 Sonnet',
-    description: 'Advanced reasoning Anthropic model',
+    name: 'GPT-5 Reasoning',
+    description: 'Advanced reasoning OpenAI model',
   },
 ];

@@ -446,11 +446,11 @@ export async function POST(request: Request) {
             generateImage: generateImage({ session }),
           },
 
-          // Enable reasoning for reasoning model
+          // Enable reasoning summaries for reasoning model
           ...(selectedChatModel === 'chat-model-reasoning' && {
             providerOptions: {
-              anthropic: {
-                thinking: { type: 'enabled', budgetTokens: 10000 },
+              openai: {
+                reasoningSummary: 'auto',
               },
             },
           }),

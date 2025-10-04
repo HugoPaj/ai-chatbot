@@ -5,7 +5,7 @@ import cx from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';
 import { memo, useState } from 'react';
 import type { Vote } from '@/lib/db/schema';
-import type { Attachment, Citation } from '@/lib/types';
+import type { Citation } from '@/lib/types';
 import { DocumentToolCall, DocumentToolResult } from './document';
 import { PencilEditIcon, SparklesIcon } from './icons';
 import { Markdown } from './markdown';
