@@ -267,7 +267,7 @@ const DocumentContent = ({ document }: { document: Document }) => {
           </div>
         </div>
       ) : document.kind === 'latex' ? (
-        <div className="flex flex-1 relative w-full h-full">
+        <div className="flex flex-1 relative size-full">
           <CodeEditor {...commonProps} onSaveContent={() => {}} />
         </div>
       ) : document.kind === 'sheet' ? (

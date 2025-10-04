@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       console.error('LaTeX compilation error:', errorText);
 
       return new ChatSDKError(
-        'internal_server_error:api',
+        'bad_request:api',
         'Failed to compile LaTeX document. Please check your LaTeX syntax.',
       ).toResponse();
     }
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error('Error compiling LaTeX:', error);
     return new ChatSDKError(
-      'internal_server_error:api',
+      'bad_request:api',
       error.message || 'An error occurred while compiling LaTeX',
     ).toResponse();
   }

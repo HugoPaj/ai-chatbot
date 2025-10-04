@@ -58,7 +58,7 @@ const MarkdownImage = ({ node, alt, src, ...props }: any) => {
   );
 
   return (
-    <span className="block my-4 flex flex-col items-center">
+    <span className="flex my-4 flex-col items-center">
       <span className="relative max-w-full border rounded-lg overflow-hidden shadow-sm block">
         {imageFailed ? (
           <FallbackImage originalSrc={src} altText={alt} />

@@ -46,10 +46,8 @@ export const latexArtifact = new Artifact<'latex', Metadata>({
         status={status}
         isCurrentVersion={isCurrentVersion}
         onSaveContent={onSaveContent}
-        mode="edit"
         currentVersionIndex={0}
-        getDocumentContentById={() => content}
-        isLoading={false}
+        suggestions={[]}
       />
     );
   },
