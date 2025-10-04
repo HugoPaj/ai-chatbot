@@ -5,30 +5,56 @@ import { updateDocumentPrompt } from '@/lib/ai/prompts';
 import { createDocumentHandler } from '@/lib/artifacts/server';
 
 const latexPrompt = `
-You are a LaTeX document generator. Create well-structured LaTeX documents based on the user's request.
+You are an expert LaTeX document generator. Create professional, well-structured LaTeX documents based on the user's request.
 
-Guidelines:
+Professional Formatting Guidelines:
 - Always include a complete, compilable LaTeX document with \\documentclass, \\begin{document}, and \\end{document}
 - Use appropriate document classes (article, report, book, beamer for presentations)
-- Include necessary packages (amsmath for math, graphicx for images, etc.)
-- Structure content with sections, subsections, etc.
-- Use proper LaTeX formatting for equations, lists, tables, and references
-- Add comments to explain complex sections
+- Include essential packages for professional appearance:
+  * amsmath, amssymb for mathematical notation
+  * graphicx for images
+  * hyperref for clickable links and references
+  * geometry for proper margins (e.g., \\usepackage[margin=1in]{geometry})
+  * fontenc and inputenc for proper character encoding
+  * babel for language support when needed
+  * booktabs for professional tables
+  * caption for better figure/table captions
+- Use proper document structure with clear hierarchy (sections, subsections, subsubsections)
+- Format equations using proper LaTeX environments (equation, align, etc.)
+- Create professional tables with \\toprule, \\midrule, \\bottomrule from booktabs
+- Use proper spacing and paragraph formatting
+- Include abstract for academic papers
+- Add table of contents for longer documents (\\tableofcontents)
+- Use proper citation styles when references are needed
+- Ensure consistent formatting throughout
+- Use professional typography (avoid excessive bold, italics, or capitalization)
 - Ensure the document will compile with pdflatex
 
-Example structure:
-\\documentclass{article}
-\\usepackage{amsmath}
+Example structure for academic paper:
+\\documentclass[12pt,a4paper]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage{amsmath,amssymb}
 \\usepackage{graphicx}
-\\title{Title Here}
+\\usepackage[margin=1in]{geometry}
+\\usepackage{hyperref}
+\\usepackage{booktabs}
+
+\\title{Professional Title Here}
 \\author{Author Name}
 \\date{\\today}
 
 \\begin{document}
 \\maketitle
 
+\\begin{abstract}
+Brief summary of the document...
+\\end{abstract}
+
+\\tableofcontents
+
 \\section{Introduction}
-Content here...
+Content here with proper formatting...
 
 \\end{document}
 `;

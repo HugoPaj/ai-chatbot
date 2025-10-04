@@ -41,18 +41,16 @@ export const latexArtifact = new Artifact<'latex', Metadata>({
   },
   content: ({ content, status, isCurrentVersion, onSaveContent }) => {
     return (
-      <div className="px-1">
-        <CodeEditor
-          content={content}
-          status={status}
-          isCurrentVersion={isCurrentVersion}
-          onSaveContent={onSaveContent}
-          mode="edit"
-          currentVersionIndex={0}
-          getDocumentContentById={() => content}
-          isLoading={false}
-        />
-      </div>
+      <CodeEditor
+        content={content}
+        status={status}
+        isCurrentVersion={isCurrentVersion}
+        onSaveContent={onSaveContent}
+        mode="edit"
+        currentVersionIndex={0}
+        getDocumentContentById={() => content}
+        isLoading={false}
+      />
     );
   },
   actions: [
