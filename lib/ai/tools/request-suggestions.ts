@@ -8,7 +8,6 @@ import { myProvider } from '../providers';
 
 interface RequestSuggestionsProps {
   session: Session;
-  // Note: DataStreamWriter has been replaced in AI SDK v5
   dataStream: any;
 }
 
@@ -60,12 +59,9 @@ export const requestSuggestions = ({
         };
 
         dataStream.write({
-          'type': 'data',
-
-          'value': [{
-            type: 'suggestion',
-            content: suggestion,
-          }]
+          type: 'data-suggestion',
+          data: suggestion,
+          transient: true,
         });
 
         suggestions.push(suggestion);

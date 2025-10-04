@@ -6,7 +6,6 @@ import { documentHandlersByArtifactKind } from '@/lib/artifacts/server';
 
 interface UpdateDocumentProps {
   session: Session;
-  // Note: DataStreamWriter has been replaced in AI SDK v5
   dataStream: any;
 }
 
@@ -29,12 +28,9 @@ export const updateDocument = ({ session, dataStream }: UpdateDocumentProps) =>
       }
 
       dataStream.write({
-        'type': 'data',
-
-        'value': [{
-          type: 'clear',
-          content: document.title,
-        }]
+        type: 'data-clear',
+        data: null,
+        transient: true,
       });
 
       const documentHandler = documentHandlersByArtifactKind.find(
@@ -54,8 +50,9 @@ export const updateDocument = ({ session, dataStream }: UpdateDocumentProps) =>
       });
 
       dataStream.write({
-        'type': 'data',
-        'value': [{ type: 'finish', content: '' }]
+        type: 'data-finish',
+        data: null,
+        transient: true,
       });
 
       return {

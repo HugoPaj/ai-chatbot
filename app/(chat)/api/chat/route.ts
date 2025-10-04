@@ -435,13 +435,11 @@ export async function POST(request: Request) {
 
           tools: {
             getWeather,
-            // @ts-expect-error: dataStream API changed in v5, needs migration
-            createDocument: createDocument({ session }),
-            // @ts-expect-error: dataStream API changed in v5, needs migration
-            updateDocument: updateDocument({ session }),
-            // @ts-expect-error: dataStream API changed in v5, needs migration
+            createDocument: createDocument({ session, dataStream: writer }),
+            updateDocument: updateDocument({ session, dataStream: writer }),
             requestSuggestions: requestSuggestions({
               session,
+              dataStream: writer,
             }),
             generateImage: generateImage({ session }),
           },

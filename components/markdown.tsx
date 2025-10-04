@@ -58,52 +58,50 @@ const MarkdownImage = ({ node, alt, src, ...props }: any) => {
   );
 
   return (
-    <span className="block my-4">
-      <span className="flex flex-col items-center">
-        <span className="relative max-w-full border rounded-lg overflow-hidden shadow-sm block">
-          {imageFailed ? (
-            <FallbackImage originalSrc={src} altText={alt} />
-          ) : (
-            <>
-              {isR2Url || isDataUrl ? (
-                // For R2 URLs and data URLs, use unoptimized to avoid Next.js image optimization issues
-                <Image
-                  src={src}
-                  alt={alt || 'Document image'}
-                  width={800}
-                  height={400}
-                  className="max-w-full h-auto object-contain"
-                  style={{ maxHeight: '400px' }}
-                  unoptimized
-                  onError={(e) => {
-                    console.error('Image failed to load:', src);
-                    setImageFailed(true);
-                  }}
-                />
-              ) : (
-                // For other URLs, use normal Next.js optimization
-                <Image
-                  src={src}
-                  alt={alt || 'Document image'}
-                  width={800}
-                  height={400}
-                  className="max-w-full h-auto object-contain"
-                  style={{ maxHeight: '400px' }}
-                  onError={(e) => {
-                    console.error('Image failed to load:', src);
-                    setImageFailed(true);
-                  }}
-                />
-              )}
-            </>
-          )}
-        </span>
-        {alt && !imageFailed && (
-          <span className="text-sm text-gray-600 mt-2 text-center max-w-full break-words block">
-            {alt}
-          </span>
+    <span className="block my-4 flex flex-col items-center">
+      <span className="relative max-w-full border rounded-lg overflow-hidden shadow-sm block">
+        {imageFailed ? (
+          <FallbackImage originalSrc={src} altText={alt} />
+        ) : (
+          <>
+            {isR2Url || isDataUrl ? (
+              // For R2 URLs and data URLs, use unoptimized to avoid Next.js image optimization issues
+              <Image
+                src={src}
+                alt={alt || 'Document image'}
+                width={800}
+                height={400}
+                className="max-w-full h-auto object-contain"
+                style={{ maxHeight: '400px' }}
+                unoptimized
+                onError={(e) => {
+                  console.error('Image failed to load:', src);
+                  setImageFailed(true);
+                }}
+              />
+            ) : (
+              // For other URLs, use normal Next.js optimization
+              <Image
+                src={src}
+                alt={alt || 'Document image'}
+                width={800}
+                height={400}
+                className="max-w-full h-auto object-contain"
+                style={{ maxHeight: '400px' }}
+                onError={(e) => {
+                  console.error('Image failed to load:', src);
+                  setImageFailed(true);
+                }}
+              />
+            )}
+          </>
         )}
       </span>
+      {alt && !imageFailed && (
+        <span className="text-sm text-gray-600 mt-2 text-center max-w-full break-words block">
+          {alt}
+        </span>
+      )}
     </span>
   );
 };
@@ -112,6 +110,13 @@ const components: Partial<Components> = {
   // @ts-expect-error
   code: CodeBlock,
   pre: ({ children }) => <>{children}</>,
+  p: ({ node, children, ...props }) => {
+    return (
+      <p className="mb-2 last:mb-0" {...props}>
+        {children}
+      </p>
+    );
+  },
   ol: ({ node, children, ...props }) => {
     return (
       <ol className="list-decimal list-outside ml-4" {...props}>
@@ -196,6 +201,55 @@ const components: Partial<Components> = {
     );
   },
   img: (props) => <MarkdownImage {...props} />,
+  table: ({ node, children, ...props }) => {
+    return (
+      <div className="my-4 w-full overflow-x-auto">
+        <table
+          className="w-full border-collapse rounded-md border border-border"
+          {...props}
+        >
+          {children}
+        </table>
+      </div>
+    );
+  },
+  thead: ({ node, children, ...props }) => {
+    return (
+      <thead className="bg-muted/50" {...props}>
+        {children}
+      </thead>
+    );
+  },
+  tbody: ({ node, children, ...props }) => {
+    return <tbody {...props}>{children}</tbody>;
+  },
+  tr: ({ node, children, ...props }) => {
+    return (
+      <tr className="m-0 border-t p-0 even:bg-muted/50" {...props}>
+        {children}
+      </tr>
+    );
+  },
+  th: ({ node, children, ...props }) => {
+    return (
+      <th
+        className="border border-border px-4 py-2 text-left font-bold [&[align=center]]:text-center [&[align=right]]:text-right"
+        {...props}
+      >
+        {children}
+      </th>
+    );
+  },
+  td: ({ node, children, ...props }) => {
+    return (
+      <td
+        className="border border-border px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
+        {...props}
+      >
+        {children}
+      </td>
+    );
+  },
 };
 
 const remarkPlugins = [remarkGfm, remarkMath];
@@ -207,6 +261,7 @@ const NonMemoizedMarkdown = ({ children }: { children: string }) => {
       remarkPlugins={remarkPlugins}
       rehypePlugins={rehypePlugins}
       components={components}
+      unwrapDisallowed
     >
       {children}
     </ReactMarkdown>

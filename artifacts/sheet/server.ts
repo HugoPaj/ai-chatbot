@@ -27,12 +27,9 @@ export const sheetDocumentHandler = createDocumentHandler<'sheet'>({
 
         if (csv) {
           dataStream.write({
-            'type': 'data',
-
-            'value': [{
-              type: 'sheet-delta',
-              content: csv,
-            }]
+            type: 'data-sheet-delta',
+            data: csv,
+            transient: true,
           });
 
           draftContent = csv;
@@ -41,12 +38,9 @@ export const sheetDocumentHandler = createDocumentHandler<'sheet'>({
     }
 
     dataStream.write({
-      'type': 'data',
-
-      'value': [{
-        type: 'sheet-delta',
-        content: draftContent,
-      }]
+      type: 'data-sheet-delta',
+      data: draftContent,
+      transient: true,
     });
 
     return draftContent;
@@ -72,12 +66,9 @@ export const sheetDocumentHandler = createDocumentHandler<'sheet'>({
 
         if (csv) {
           dataStream.write({
-            'type': 'data',
-
-            'value': [{
-              type: 'sheet-delta',
-              content: csv,
-            }]
+            type: 'data-sheet-delta',
+            data: csv,
+            transient: true,
           });
 
           draftContent = csv;

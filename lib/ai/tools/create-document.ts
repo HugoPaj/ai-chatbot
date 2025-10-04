@@ -9,8 +9,6 @@ import {
 
 interface CreateDocumentProps {
   session: Session;
-  // Note: DataStreamWriter has been replaced in AI SDK v5
-  // This will need to be updated to use the new writer interface
   dataStream: any;
 }
 
@@ -26,39 +24,27 @@ export const createDocument = ({ session, dataStream }: CreateDocumentProps) =>
       const id = generateUUID();
 
       dataStream.write({
-        'type': 'data',
-
-        'value': [{
-          type: 'kind',
-          content: kind,
-        }]
+        type: 'data-kind',
+        data: kind,
+        transient: true,
       });
 
       dataStream.write({
-        'type': 'data',
-
-        'value': [{
-          type: 'id',
-          content: id,
-        }]
+        type: 'data-id',
+        data: id,
+        transient: true,
       });
 
       dataStream.write({
-        'type': 'data',
-
-        'value': [{
-          type: 'title',
-          content: title,
-        }]
+        type: 'data-title',
+        data: title,
+        transient: true,
       });
 
       dataStream.write({
-        'type': 'data',
-
-        'value': [{
-          type: 'clear',
-          content: '',
-        }]
+        type: 'data-clear',
+        data: null,
+        transient: true,
       });
 
       const documentHandler = documentHandlersByArtifactKind.find(
@@ -78,8 +64,9 @@ export const createDocument = ({ session, dataStream }: CreateDocumentProps) =>
       });
 
       dataStream.write({
-        'type': 'data',
-        'value': [{ type: 'finish', content: '' }]
+        type: 'data-finish',
+        data: null,
+        transient: true,
       });
 
       return {

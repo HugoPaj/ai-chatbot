@@ -25,12 +25,9 @@ export const textDocumentHandler = createDocumentHandler<'text'>({
         draftContent += textDelta;
 
         dataStream.write({
-          'type': 'data',
-
-          'value': [{
-            type: 'text-delta',
-            content: textDelta,
-          }]
+          type: 'data-text-delta',
+          data: textDelta,
+          transient: true,
         });
       }
     }
@@ -63,12 +60,9 @@ export const textDocumentHandler = createDocumentHandler<'text'>({
 
         draftContent += textDelta;
         dataStream.write({
-          'type': 'data',
-
-          'value': [{
-            type: 'text-delta',
-            content: textDelta,
-          }]
+          type: 'data-text-delta',
+          data: textDelta,
+          transient: true,
         });
       }
     }
