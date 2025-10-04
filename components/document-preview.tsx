@@ -243,7 +243,7 @@ const DocumentContent = ({ document }: { document: Document }) => {
     'h-[257px] overflow-y-scroll border rounded-b-2xl dark:bg-muted border-t-0 dark:border-zinc-700',
     {
       'p-4 sm:px-14 sm:py-16': document.kind === 'text',
-      'p-0': document.kind === 'code',
+      'p-0': document.kind === 'code' || document.kind === 'latex',
     },
   );
 
@@ -265,6 +265,10 @@ const DocumentContent = ({ document }: { document: Document }) => {
           <div className="absolute inset-0">
             <CodeEditor {...commonProps} onSaveContent={() => {}} />
           </div>
+        </div>
+      ) : document.kind === 'latex' ? (
+        <div className="flex flex-1 relative w-full h-full">
+          <CodeEditor {...commonProps} onSaveContent={() => {}} />
         </div>
       ) : document.kind === 'sheet' ? (
         <div className="flex flex-1 relative size-full p-4">
