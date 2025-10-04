@@ -18,12 +18,22 @@ export async function POST(request: Request) {
       ).toResponse();
     }
 
-    // Use LaTeX.Online API to compile LaTeX to PDF
-    const encodedLatex = encodeURIComponent(latex);
-    const compileUrl = `https://latexonline.cc/compile?text=${encodedLatex}&command=pdflatex`;
-
-    const response = await fetch(compileUrl, {
-      method: 'GET',
+    // Use LaTeX-on-HTTP API to compile LaTeX to PDF
+    // This service accepts POST requests with JSON payload
+    const response = await fetch('https://latex.ytotech.com/builds/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        compiler: 'pdflatex',
+        resources: [
+          {
+            main: true,
+            content: latex,
+          },
+        ],
+      }),
     });
 
     if (!response.ok) {

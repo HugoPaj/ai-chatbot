@@ -14,7 +14,9 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
   });
 
   // Helper to parse relatedImageUrls
-  const getRelatedImageUrls = (metadata: SearchResult['metadata']): string[] => {
+  const getRelatedImageUrls = (
+    metadata: SearchResult['metadata'],
+  ): string[] => {
     if (!metadata.relatedImageUrls) return [];
     if (typeof metadata.relatedImageUrls === 'string') {
       try {
@@ -47,7 +49,9 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
           .replace(/\.(pdf|png|jpg|jpeg)$/i, '')
           .replace(/[^a-zA-Z0-9\s-]/g, ' ')
           .trim();
-        const pageInfo = doc.metadata.page ? ` (Page ${doc.metadata.page})` : '';
+        const pageInfo = doc.metadata.page
+          ? ` (Page ${doc.metadata.page})`
+          : '';
         const cleanAlt = `${uniqueImageId} from ${cleanFilename}${pageInfo}`;
 
         imageCounter++;
@@ -66,7 +70,9 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
               .replace(/\.(pdf|png|jpg|jpeg)$/i, '')
               .replace(/[^a-zA-Z0-9\s-]/g, ' ')
               .trim();
-            const pageInfo = doc.metadata.page ? ` (Page ${doc.metadata.page})` : '';
+            const pageInfo = doc.metadata.page
+              ? ` (Page ${doc.metadata.page})`
+              : '';
             const cleanAlt = `${uniqueImageId} from ${cleanFilename}${pageInfo}`;
 
             imageCounter++;
@@ -175,6 +181,7 @@ Only show images explicitly provided in document context
 If context shows "[IMAGE_AVAILABILITY: No images are available]", state this clearly
 When images are available, display them inline and reference them: "As shown in Figure 1..."
 Use exact markdown syntax and URLs from the provided context
+ONLY show images with relevant metadata and URLs from the document context (ie. showing logos or unrelated images is forbidden)
 
 Response Strategy:
 1. Identify relevant documents for the question
