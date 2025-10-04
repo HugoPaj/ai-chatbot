@@ -179,14 +179,16 @@ const PureHitboxLayer = ({
 
   return (
     <div
-      className="size-full absolute top-0 left-0 rounded-xl z-10"
+      className="size-full absolute top-0 left-0 rounded-xl z-10 pointer-events-none"
       ref={hitboxRef}
-      onClick={handleClick}
       role="presentation"
       aria-hidden="true"
     >
       <div className="w-full p-4 flex justify-end items-center">
-        <div className="absolute right-[9px] top-[13px] p-2 hover:dark:bg-zinc-700 rounded-md hover:bg-zinc-100">
+        <div
+          className="absolute right-[9px] top-[13px] p-2 hover:dark:bg-zinc-700 rounded-md hover:bg-zinc-100 pointer-events-auto cursor-pointer"
+          onClick={handleClick}
+        >
           <FullscreenIcon />
         </div>
       </div>
