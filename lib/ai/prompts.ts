@@ -6,8 +6,28 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
   let imageCounter = 1;
 
   const filteredDocs = similarDocs.filter((doc) => {
-    // Use lower threshold for images since they might have lower similarity scores with text queries
+    // Filter out logos, watermarks, and decorative images
     if (doc.metadata.contentType === 'image') {
+      const description = (doc.metadata.content || '').toLowerCase();
+
+      // Check for explicit LOGO prefix from vision AI
+      if (description.startsWith('logo:')) {
+        return false;
+      }
+
+      const isLogo =
+        description.includes('logo') ||
+        description.includes('watermark') ||
+        description.includes('decorat') ||
+        description.includes('header image') ||
+        description.includes('footer image') ||
+        description.includes('background') ||
+        description.includes('emblem') ||
+        description.includes('crest') ||
+        description.includes('lion');
+
+      if (isLogo) return false;
+
       return doc.score > 0.02;
     }
     return doc.score > 0.3;
@@ -181,7 +201,9 @@ Only show images explicitly provided in document context
 If context shows "[IMAGE_AVAILABILITY: No images are available]", state this clearly
 When images are available, display them inline and reference them: "As shown in Figure 1..."
 Use exact markdown syntax and URLs from the provided context
-ONLY show images with relevant metadata and URLs from the document context (ie. showing logos or unrelated images is forbidden)
+CRITICAL: ONLY show images that contain relevant content (diagrams, charts, graphs, figures, tables)
+NEVER include logos, watermarks, decorative images, headers, footers, or background images
+Check the image description/metadata before including - if it describes a logo or decorative element, DO NOT include it
 
 Response Strategy:
 1. Identify relevant documents for the question

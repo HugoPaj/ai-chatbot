@@ -228,7 +228,11 @@ async def analyze_image_with_vision(image_base64: str, page_no: int, filename: s
         # Prepare the vision analysis prompt
         prompt = f"""Analyze this image from page {page_no} of the document "{filename}".
 
-Provide a detailed, specific description that includes:
+CRITICAL FIRST STEP: Determine if this is a logo, watermark, decorative element, header/footer, or background image.
+- If it IS a logo, watermark, or decorative element, respond with EXACTLY: "LOGO: [brief description]"
+- If it IS NOT a logo or decorative element, provide a detailed technical description.
+
+For technical content, provide a detailed, specific description that includes:
 1. What type of diagram/figure it is (graph, circuit diagram, flowchart, equation, table, photo, etc.)
 2. The main concepts, variables, or components shown
 3. Any labels, axes, titles, or key text visible
