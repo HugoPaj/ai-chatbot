@@ -123,7 +123,7 @@ export function Chat({
     useChat({
       id,
       messages: initialMessages, // Load initial messages from database
-      experimental_throttle: 0, // No throttling for fastest streaming
+      experimental_throttle: 16, // No throttling for fastest streaming
       generateId: generateUUID,
       // Dynamically import to avoid ESM type issues
       transport: new (require('ai').DefaultChatTransport)({
