@@ -225,22 +225,33 @@ async def analyze_image_with_vision(image_base64: str, page_no: int, filename: s
             logger.warning("ANTHROPIC_API_KEY not found, using generic description")
             return "Engineering technical diagram chart graph illustration"
 
-        # Prepare the vision analysis prompt
+        # Prepare the vision analysis prompt with stricter logo detection
         prompt = f"""Analyze this image from page {page_no} of the document "{filename}".
 
-CRITICAL FIRST STEP: Determine if this is a logo, watermark, decorative element, header/footer, or background image.
-- If it IS a logo, watermark, or decorative element, respond with EXACTLY: "LOGO: [brief description]"
-- If it IS NOT a logo or decorative element, provide a detailed technical description.
+CRITICAL FIRST STEP - Logo/Decorative Detection:
+Respond with EXACTLY "LOGO: [description]" if the image is ANY of these:
+- Institution/university/company logos
+- Emblems, crests, shields, or heraldic symbols
+- Decorative headers, footers, or watermarks
+- Icons without technical/educational content
+- Stylized animals/symbols used for branding (lions, eagles, crowns, etc.)
+- Page borders or ornamental designs
 
-For technical content, provide a detailed, specific description that includes:
-1. What type of diagram/figure it is (graph, circuit diagram, flowchart, equation, table, photo, etc.)
-2. The main concepts, variables, or components shown
-3. Any labels, axes, titles, or key text visible
-4. The relationships or processes being illustrated
+ONLY provide a technical description if the image contains educational/technical content like:
+- Graphs, charts, plots with data
+- Diagrams showing processes or systems
+- Mathematical equations or formulas
+- Technical schematics or blueprints
+- Tables with data
+- Photos of experiments or equipment
 
-Be specific and technical. Focus on the content that would help someone understand what this figure shows without seeing it.
+For technical content, describe:
+1. Type of diagram/figure
+2. Main concepts/variables/components
+3. Labels, axes, titles, or key text
+4. Relationships or processes illustrated
 
-Keep your description to 2-3 sentences maximum, dense with technical information."""
+Keep to 2-3 sentences maximum."""
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -451,13 +462,14 @@ async def extract_chunks_from_json(doc_dict: dict, doc: DoclingDocument, filenam
                     if not image_data:
                         continue
 
-                    # Check image size
+                    # Minimal validation - just check if image data exists
                     try:
                         decoded_bytes = base64.b64decode(image_data)
-                        if len(decoded_bytes) < 500:
-                            logger.debug(f"Skipping image {i+1}: too small ({len(decoded_bytes)} bytes)")
+                        if len(decoded_bytes) < 100:
+                            logger.debug(f"Skipping image {i+1}: corrupted or empty")
                             continue
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(f"Error validating image data: {e}")
                         continue
 
                     page_no = 1

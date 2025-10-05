@@ -113,6 +113,7 @@ function PureMultimodalInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
+  const [isDragging, setIsDragging] = useState(false);
   const { startRequest } = usePerformanceMonitor();
 
   const submitForm = useCallback(() => {
@@ -204,6 +205,75 @@ function PureMultimodalInput({
     [setAttachments],
   );
 
+  const handleFilesUpload = useCallback(
+    async (files: File[]) => {
+      setUploadQueue(files.map((file) => file.name));
+
+      try {
+        const uploadPromises = files.map((file) => uploadFile(file));
+        const uploadedAttachments = await Promise.all(uploadPromises);
+        const successfullyUploadedAttachments = uploadedAttachments.filter(
+          (attachment) => attachment !== undefined,
+        );
+
+        setAttachments((currentAttachments) => [
+          ...currentAttachments,
+          ...successfullyUploadedAttachments,
+        ]);
+      } catch (error) {
+        console.error('Error uploading files!', error);
+      } finally {
+        setUploadQueue([]);
+      }
+    },
+    [setAttachments],
+  );
+
+  const handlePaste = useCallback(
+    async (event: React.ClipboardEvent) => {
+      const items = Array.from(event.clipboardData.items);
+      const imageItems = items.filter((item) => item.type.startsWith('image/'));
+
+      if (imageItems.length > 0) {
+        event.preventDefault();
+        const files = imageItems
+          .map((item) => item.getAsFile())
+          .filter((file): file is File => file !== null);
+
+        if (files.length > 0) {
+          await handleFilesUpload(files);
+        }
+      }
+    },
+    [handleFilesUpload],
+  );
+
+  const handleDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    async (event: React.DragEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsDragging(false);
+
+      const files = Array.from(event.dataTransfer.files);
+      if (files.length > 0) {
+        await handleFilesUpload(files);
+      }
+    },
+    [handleFilesUpload],
+  );
+
   const { isAtBottom, scrollToBottom } = useScrollToBottom();
 
   useEffect(() => {
@@ -213,7 +283,18 @@ function PureMultimodalInput({
   }, [status, scrollToBottom]);
 
   return (
-    <div className="relative w-full flex flex-col gap-4">
+    <div
+      className="relative w-full flex flex-col gap-4"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragging && (
+        <div className="absolute inset-0 bg-primary/10 border-2 border-dashed border-primary rounded-2xl z-50 flex items-center justify-center">
+          <p className="text-primary font-medium">Drop files here</p>
+        </div>
+      )}
+
       <AnimatePresence>
         {!isAtBottom && (
           <motion.div
@@ -264,8 +345,32 @@ function PureMultimodalInput({
           data-testid="attachments-preview"
           className="flex flex-row gap-2 overflow-x-scroll items-end"
         >
-          {attachments.map((attachment) => (
-            <PreviewAttachment key={attachment.url} attachment={attachment} />
+          {attachments.map((attachment, index) => (
+            <PreviewAttachment
+              key={attachment.url}
+              attachment={attachment}
+              onRemove={async () => {
+                // Delete from R2 storage
+                try {
+                  await fetch('/api/files/delete', {
+                    method: 'DELETE',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      pathname: attachment.name,
+                    }),
+                  });
+                } catch (error) {
+                  console.error('Failed to delete file from storage:', error);
+                }
+
+                // Remove from UI
+                setAttachments((current) =>
+                  current.filter((_, i) => i !== index),
+                );
+              }}
+            />
           ))}
 
           {uploadQueue.map((filename) => (
@@ -288,6 +393,7 @@ function PureMultimodalInput({
         placeholder="Send a message..."
         value={input}
         onChange={handleInput}
+        onPaste={handlePaste}
         className={cx(
           'min-h-[24px] max-h-[calc(75dvh)] overflow-hidden resize-none rounded-2xl !text-base bg-muted pb-10 dark:border-zinc-700',
           className,
