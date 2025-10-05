@@ -329,6 +329,55 @@ const NonMemoizedMarkdownWithCitations = ({
       );
     },
     img: (props) => <MarkdownImage {...props} />,
+    table: ({ node, children, ...props }) => {
+      return (
+        <div className="my-4 w-full overflow-x-auto">
+          <table
+            className="w-full border-collapse rounded-md border border-border"
+            {...props}
+          >
+            {children}
+          </table>
+        </div>
+      );
+    },
+    thead: ({ node, children, ...props }) => {
+      return (
+        <thead className="bg-muted/50" {...props}>
+          {children}
+        </thead>
+      );
+    },
+    tbody: ({ node, children, ...props }) => {
+      return <tbody {...props}>{children}</tbody>;
+    },
+    tr: ({ node, children, ...props }) => {
+      return (
+        <tr className="m-0 border-t p-0 even:bg-muted/50" {...props}>
+          {children}
+        </tr>
+      );
+    },
+    th: ({ node, children, ...props }) => {
+      return (
+        <th
+          className="border border-border px-4 py-2 text-left font-bold [&[align=center]]:text-center [&[align=right]]:text-right"
+          {...props}
+        >
+          {children}
+        </th>
+      );
+    },
+    td: ({ node, children, ...props }) => {
+      return (
+        <td
+          className="border border-border px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
+          {...props}
+        >
+          {children}
+        </td>
+      );
+    },
     // Custom text processor for citations
     p: ({ node, children, ...props }) => {
       // Process paragraph text for citations
