@@ -287,6 +287,44 @@ export class CohereEmbeddingService {
     );
   }
 
+  /**
+   * Rerank documents based on their relevance to a query
+   * @param query - The search query
+   * @param documents - Array of document texts to rerank
+   * @param topN - Number of top results to return (default: 10)
+   * @returns Array of reranked results with scores and indices
+   */
+  static async rerankDocuments(
+    query: string,
+    documents: string[],
+    topN = 10,
+  ): Promise<Array<{ index: number; relevanceScore: number }>> {
+    const client = CohereEmbeddingService.initializeClient();
+
+    try {
+      console.log(`🔄 Reranking ${documents.length} documents for query: "${query.substring(0, 50)}..."`);
+
+      const response = await client.rerank({
+        query,
+        documents,
+        topN: Math.min(topN, documents.length),
+        model: 'rerank-v3.5',
+      });
+
+      const results = response.results.map((result) => ({
+        index: result.index,
+        relevanceScore: result.relevanceScore,
+      }));
+
+      console.log(`✅ Reranked to top ${results.length} documents (scores: ${results[0]?.relevanceScore.toFixed(3)} - ${results[results.length - 1]?.relevanceScore.toFixed(3)})`);
+
+      return results;
+    } catch (error) {
+      console.error('Error reranking documents:', error);
+      throw error;
+    }
+  }
+
   // Validate and clean base64 image data for Cohere API
   private static validateAndCleanBase64Image(imageBase64: string): string {
     if (!imageBase64 || typeof imageBase64 !== 'string') {

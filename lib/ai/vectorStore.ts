@@ -312,6 +312,7 @@ export class VectorStore {
     query: string,
     topK = 100,
     contentTypeFilter?: ContentType,
+    useReranking = true,
   ): Promise<SearchResult[]> {
     try {
       const queryEmbedding = await CohereEmbeddingService.generateTextEmbedding(
@@ -320,9 +321,12 @@ export class VectorStore {
       );
       const index = this.pinecone.index(this.indexName);
 
+      // Over-retrieve if we're going to rerank
+      const retrievalTopK = useReranking ? Math.max(topK * 10, 100) : topK;
+
       const searchResponse = await index.query({
         vector: queryEmbedding,
-        topK,
+        topK: retrievalTopK,
         includeMetadata: true,
         includeValues: false,
         filter: contentTypeFilter
@@ -330,12 +334,32 @@ export class VectorStore {
           : undefined,
       });
 
-      return (
+      const initialResults =
         searchResponse.matches?.map((match) => ({
           score: match.score || 0,
           metadata: match.metadata as unknown as SearchResult['metadata'],
-        })) || []
+        })) || [];
+
+      // If reranking is disabled or we have no results, return as-is
+      if (!useReranking || initialResults.length === 0) {
+        return initialResults.slice(0, topK);
+      }
+
+      // Rerank the results
+      const documents = initialResults.map(
+        (result) => result.metadata.content || '',
       );
+      const rerankedIndices = await CohereEmbeddingService.rerankDocuments(
+        query,
+        documents,
+        topK,
+      );
+
+      // Map reranked results back to original format with new scores
+      return rerankedIndices.map((reranked) => ({
+        score: reranked.relevanceScore,
+        metadata: initialResults[reranked.index].metadata,
+      }));
     } catch (error) {
       console.error('Error searching vectors:', error);
       throw error;
@@ -347,6 +371,7 @@ export class VectorStore {
     imageBase64: string,
     topK = 100,
     contentTypeFilter?: ContentType,
+    useReranking = false, // Image search typically doesn't benefit from text reranking
   ): Promise<SearchResult[]> {
     try {
       const queryEmbedding =
@@ -366,12 +391,21 @@ export class VectorStore {
           : undefined,
       });
 
-      return (
+      const results =
         searchResponse.matches?.map((match) => ({
           score: match.score || 0,
           metadata: match.metadata as unknown as SearchResult['metadata'],
-        })) || []
-      );
+        })) || [];
+
+      // Note: Reranking for image queries is typically not useful since
+      // the reranker works with text, not visual similarity
+      if (useReranking && results.length > 0) {
+        console.warn(
+          '⚠️ Reranking image search results is not recommended - skipping',
+        );
+      }
+
+      return results;
     } catch (error) {
       console.error('Error searching vectors by image:', error);
       throw error;
