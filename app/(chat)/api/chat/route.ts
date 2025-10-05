@@ -410,7 +410,17 @@ export async function POST(request: Request) {
           });
         }
 
-        // Citations will be sent after the response is complete
+        // Send citations data before streaming begins so they're available immediately
+        if (citations.length > 0) {
+          console.log('[DEBUG] Sending citations data before streaming:', citations.length, 'citations');
+          writer.write({
+            type: 'data-citations',
+            data: {
+              type: 'citations',
+              citations: citations,
+            },
+          });
+        }
 
         const result = streamText({
           model: myProvider.languageModel(resolvedModelId),
@@ -457,21 +467,7 @@ export async function POST(request: Request) {
           }),
 
           onFinish: async () => {
-            // Send citations data after the response is complete
-            if (citations.length > 0) {
-              console.log(
-                '[DEBUG] Sending citations data after response:',
-                citations.length,
-                'citations',
-              );
-              writer.write({
-                type: 'data-citations',
-                data: {
-                  type: 'citations',
-                  citations: citations,
-                },
-              });
-            }
+            // Citations are now sent before streaming begins (see above)
           },
 
           experimental_telemetry: {

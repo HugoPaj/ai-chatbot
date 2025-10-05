@@ -62,7 +62,10 @@ const PurePreviewMessage = ({
       )
       .flatMap((part: any) => part.data.citations) || [];
 
-  const { sources } = useSources({ chatId });
+  const { sources, citations: globalCitations } = useSources({ chatId });
+
+  // Use message citations if available (after reload), otherwise use global citations (during streaming)
+  const displayedCitations = messageCitations.length > 0 ? messageCitations : globalCitations;
 
   const handleCitationClick = (citation: Citation) => {
     setHighlightedCitationId(citation.id);
@@ -169,9 +172,9 @@ const PurePreviewMessage = ({
                         })}
                       >
                         {message.role === 'assistant' &&
-                        messageCitations.length > 0 ? (
+                        displayedCitations.length > 0 ? (
                           <MarkdownWithCitations
-                            citations={messageCitations}
+                            citations={displayedCitations}
                             onCitationClick={handleCitationClick}
                           >
                             {sanitizeText(part.text)}
@@ -319,13 +322,13 @@ const PurePreviewMessage = ({
 
             {message.role === 'assistant' && !isLoading && (
               <>
-                {messageCitations.length > 0 && (
+                {displayedCitations.length > 0 && (
                   <CitationsDisplay
-                    citations={messageCitations}
+                    citations={displayedCitations}
                     highlightedCitationId={highlightedCitationId}
                   />
                 )}
-                {sources.length > 0 && messageCitations.length === 0 && (
+                {sources.length > 0 && displayedCitations.length === 0 && (
                   <SourcesDisplay sources={sources} />
                 )}
               </>
