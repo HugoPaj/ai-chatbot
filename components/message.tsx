@@ -25,7 +25,6 @@ import { CitationsDisplay } from './citations-display';
 import { useSources } from '@/hooks/use-sources';
 import { ImageGeneration } from './image-generation';
 import { ToolCallIndicator } from './tool-call-indicator';
-
 const PurePreviewMessage = ({
   chatId,
   message,
@@ -53,13 +52,15 @@ const PurePreviewMessage = ({
   >();
 
   // Extract citations from this specific message's parts
-  const messageCitations: Citation[] = message.parts
-    ?.filter((part: any) =>
-      part.type === 'data' &&
-      part.data?.type === 'citations' &&
-      Array.isArray(part.data?.citations)
-    )
-    .flatMap((part: any) => part.data.citations) || [];
+  const messageCitations: Citation[] =
+    message.parts
+      ?.filter(
+        (part: any) =>
+          part.type === 'data' &&
+          part.data?.type === 'citations' &&
+          Array.isArray(part.data?.citations),
+      )
+      .flatMap((part: any) => part.data.citations) || [];
 
   const { sources } = useSources({ chatId });
 
@@ -305,10 +306,9 @@ const PurePreviewMessage = ({
                           prompt={toolResult?.prompt}
                           error={toolResult?.error}
                         />
-                      ) : toolName === 'calculate' ? (
-                        // Don't show raw output for calculate - let AI interpret the result
-                        null
-                      ) : (
+                      ) : toolName ===
+                        'calculate' ? // Don't show raw output for calculate - let AI interpret the result
+                      null : (
                         <pre>{JSON.stringify(toolResult, null, 2)}</pre>
                       )}
                     </div>

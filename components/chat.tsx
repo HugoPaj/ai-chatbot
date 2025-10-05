@@ -20,7 +20,11 @@ import type { Session } from 'next-auth';
 import { useSearchParams } from 'next/navigation';
 import { useChatVisibility } from '@/hooks/use-chat-visibility';
 import { useAutoResume } from '@/hooks/use-auto-resume';
-import { useSources, setGlobalSources, setGlobalCitations } from '@/hooks/use-sources';
+import {
+  useSources,
+  setGlobalSources,
+  setGlobalCitations,
+} from '@/hooks/use-sources';
 import { ChatSDKError } from '@/lib/errors';
 import { usePerformanceMonitor } from '@/lib/performance-monitor';
 
@@ -85,7 +89,10 @@ export function Chat({
                     if (data.type === 'data-sources' && data.data?.sources) {
                       setGlobalSources(id, data.data.sources);
                     }
-                    if (data.type === 'data-citations' && data.data?.citations) {
+                    if (
+                      data.type === 'data-citations' &&
+                      data.data?.citations
+                    ) {
                       setGlobalCitations(id, data.data.citations);
                     }
                   } catch (e) {
@@ -116,7 +123,7 @@ export function Chat({
     useChat({
       id,
       messages: initialMessages, // Load initial messages from database
-      experimental_throttle: 16,
+      experimental_throttle: 0, // No throttling for fastest streaming
       generateId: generateUUID,
       // Dynamically import to avoid ESM type issues
       transport: new (require('ai').DefaultChatTransport)({
@@ -161,23 +168,25 @@ export function Chat({
 
       // Add file parts first (if any)
       if (attachments && attachments.length > 0) {
-        parts.push(...attachments.map(att => ({
-          type: 'file',
-          url: att.url,
-          name: att.name,
-          mediaType: att.contentType
-        })));
+        parts.push(
+          ...attachments.map((att) => ({
+            type: 'file',
+            url: att.url,
+            name: att.name,
+            mediaType: att.contentType,
+          })),
+        );
       }
 
       // Add text part
       parts.push({
         type: 'text',
-        text: m.content
+        text: m.content,
       });
 
       void sendMessage({
         role: 'user' as const,
-        parts
+        parts,
       });
     },
     [sendMessage],
