@@ -91,21 +91,6 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
     });
   }
 
-  // Extract citations from messages for initial load
-  // Keep ungrouped to match inline citation numbers [1], [2], etc. in the text
-  const initialCitations = messagesFromDb
-    .filter((msg) => msg.role === 'assistant')
-    .flatMap((msg) => {
-      const parts = msg.parts as Array<any>;
-      const citationPart = parts?.find(
-        (part) =>
-          part.type === 'data' &&
-          part.data?.type === 'citations' &&
-          Array.isArray(part.data?.citations)
-      );
-      return citationPart?.data?.citations || [];
-    });
-
   const cookieStore = await cookies();
   const chatModelFromCookie = cookieStore.get('chat-model');
 
@@ -136,7 +121,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
           session={session}
           autoResume={shouldAutoResume}
         />
-        <DataStreamHandler id={id} initialCitations={initialCitations} />
+        <DataStreamHandler id={id} />
       </>
     );
   }
@@ -152,7 +137,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
         session={session}
         autoResume={shouldAutoResume}
       />
-      <DataStreamHandler id={id} initialCitations={initialCitations} />
+      <DataStreamHandler id={id} />
     </>
   );
 }

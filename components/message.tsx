@@ -51,7 +51,17 @@ const PurePreviewMessage = ({
   const [highlightedCitationId, setHighlightedCitationId] = useState<
     string | undefined
   >();
-  const { sources, citations } = useSources({ chatId });
+
+  // Extract citations from this specific message's parts
+  const messageCitations: Citation[] = message.parts
+    ?.filter((part: any) =>
+      part.type === 'data' &&
+      part.data?.type === 'citations' &&
+      Array.isArray(part.data?.citations)
+    )
+    .flatMap((part: any) => part.data.citations) || [];
+
+  const { sources } = useSources({ chatId });
 
   const handleCitationClick = (citation: Citation) => {
     setHighlightedCitationId(citation.id);
@@ -158,9 +168,9 @@ const PurePreviewMessage = ({
                         })}
                       >
                         {message.role === 'assistant' &&
-                        citations.length > 0 ? (
+                        messageCitations.length > 0 ? (
                           <MarkdownWithCitations
-                            citations={citations}
+                            citations={messageCitations}
                             onCitationClick={handleCitationClick}
                           >
                             {sanitizeText(part.text)}
@@ -309,13 +319,13 @@ const PurePreviewMessage = ({
 
             {message.role === 'assistant' && !isLoading && (
               <>
-                {citations.length > 0 && (
+                {messageCitations.length > 0 && (
                   <CitationsDisplay
-                    citations={citations}
+                    citations={messageCitations}
                     highlightedCitationId={highlightedCitationId}
                   />
                 )}
-                {sources.length > 0 && citations.length === 0 && (
+                {sources.length > 0 && messageCitations.length === 0 && (
                   <SourcesDisplay sources={sources} />
                 )}
               </>
