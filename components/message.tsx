@@ -295,6 +295,9 @@ const PurePreviewMessage = ({
                           prompt={toolResult?.prompt}
                           error={toolResult?.error}
                         />
+                      ) : toolName === 'calculate' ? (
+                        // Don't show raw output for calculate - let AI interpret the result
+                        null
                       ) : (
                         <pre>{JSON.stringify(toolResult, null, 2)}</pre>
                       )}

@@ -24,6 +24,8 @@ const getToolDisplayName = (toolName: string, isCompleted = false): string => {
         return 'Image generated';
       case 'requestSuggestions':
         return 'Suggestions provided';
+      case 'calculate':
+        return 'Calculation completed';
       default:
         return `${toolName} completed`;
     }
@@ -40,6 +42,8 @@ const getToolDisplayName = (toolName: string, isCompleted = false): string => {
       return 'Generating image';
     case 'requestSuggestions':
       return 'Getting suggestions';
+    case 'calculate':
+      return 'Calculating';
     default:
       return `Using ${toolName}`;
   }

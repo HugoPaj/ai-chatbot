@@ -36,6 +36,7 @@ import { updateDocument } from '@/lib/ai/tools/update-document';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import { generateImage } from '@/lib/ai/tools/generate-image';
+import { calculate } from '@/lib/ai/tools/calculate';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 import { postRequestBodySchema, type PostRequestBody } from './schema';
@@ -426,6 +427,7 @@ export async function POST(request: Request) {
                   'updateDocument',
                   'requestSuggestions',
                   'generateImage',
+                  'calculate',
                 ],
 
           experimental_transform: smoothStream({
@@ -442,6 +444,7 @@ export async function POST(request: Request) {
               dataStream: writer,
             }),
             generateImage: generateImage({ session }),
+            calculate,
           },
 
           // Enable reasoning summaries for reasoning model
