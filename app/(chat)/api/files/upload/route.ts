@@ -1,6 +1,7 @@
 import { put } from '@/lib/r2';
 import { NextResponse } from 'next/server';
 import { z } from 'zod/v3';
+import crypto from 'node:crypto';
 
 import { auth } from '@/app/(auth)/auth';
 
@@ -47,11 +48,20 @@ export async function POST(request: Request) {
     }
 
     // Get filename from formData since Blob doesn't have name property
-    const filename = (formData.get('file') as File).name;
+    const originalFilename = (formData.get('file') as File).name;
     const fileBuffer = Buffer.from(await file.arrayBuffer());
 
+    // Generate content-based hash for deduplication and collision prevention
+    const extension = originalFilename.split('.').pop() || 'png';
+    const imageHash = crypto
+      .createHash('md5')
+      .update(fileBuffer)
+      .digest('hex')
+      .slice(0, 16);
+    const uniqueFilename = `chat-images/${imageHash}.${extension}`;
+
     try {
-      const data = await put(`${filename}`, fileBuffer, {
+      const data = await put(uniqueFilename, fileBuffer, {
         access: 'public',
         contentType: file.type,
       });

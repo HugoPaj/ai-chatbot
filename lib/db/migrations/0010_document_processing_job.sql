@@ -26,3 +26,4 @@ CREATE INDEX IF NOT EXISTS "idx_doc_job_user" ON "DocumentProcessingJob" ("userI
 CREATE INDEX IF NOT EXISTS "idx_doc_job_created" ON "DocumentProcessingJob" ("createdAt");
 
 
+

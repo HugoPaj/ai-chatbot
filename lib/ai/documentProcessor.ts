@@ -20,6 +20,7 @@ interface DoclingChunk {
     height: number;
   };
   image_data?: string;
+  image_url?: string; // R2 URL for uploaded image
   table_structure?: {
     headers: string[];
     rows: string[][];
@@ -280,17 +281,31 @@ const processWithDocling = async (
             }
           : undefined;
 
-        // Upload image chunks to R2 and collect URLs by page
-        if (chunk.content_type === 'image' && chunk.image_data) {
-          console.log(`    [DocProcessor] 🖼️  Uploading image chunk ${index + 1} to R2...`);
-          const uploadedUrl = await uploadImageToR2(chunk.image_data, index);
-          console.log(`    [DocProcessor] ✅ Image uploaded: ${uploadedUrl.substring(0, 50)}...`);
+        // Use R2 URL from docling service if available, otherwise upload to R2
+        if (chunk.content_type === 'image') {
+          let uploadedUrl: string;
 
-          const pageKey = `${filename}:${chunk.page || 1}`;
+          if (chunk.image_url) {
+            // Use the R2 URL already uploaded by docling service
+            console.log(`    [DocProcessor] ✅ Using R2 URL from docling service: ${chunk.image_url.substring(0, 50)}...`);
+            uploadedUrl = chunk.image_url;
+          } else if (chunk.image_data) {
+            // Fallback: upload to R2 from Vercel (should rarely happen now)
+            console.log(`    [DocProcessor] 🖼️  Uploading image chunk ${index + 1} to R2 (fallback)...`);
+            uploadedUrl = await uploadImageToR2(chunk.image_data, index);
+            console.log(`    [DocProcessor] ✅ Image uploaded: ${uploadedUrl.substring(0, 50)}...`);
+          } else {
+            // No image data available, skip
+            console.log(`    [DocProcessor] ⚠️  No image data or URL for chunk ${index + 1}`);
+            uploadedUrl = '';
+          }
 
-          const existingUrls = imageUrlsByPageMap.get(pageKey) || [];
-          existingUrls.push(uploadedUrl);
-          imageUrlsByPageMap.set(pageKey, existingUrls);
+          if (uploadedUrl) {
+            const pageKey = `${filename}:${chunk.page || 1}`;
+            const existingUrls = imageUrlsByPageMap.get(pageKey) || [];
+            existingUrls.push(uploadedUrl);
+            imageUrlsByPageMap.set(pageKey, existingUrls);
+          }
         }
 
         return {

@@ -11,6 +11,7 @@ from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from typing import Optional, Dict, Any
 import httpx
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -119,132 +120,140 @@ class DatabaseWorker:
             logger.error(f"Error updating job status: {e}")
 
     async def process_job(self, job: Dict[str, Any]):
-        """Process a single job - downloads from R2, saves locally, triggers document processor via API"""
+        """
+        Process a single job entirely in Cloud Run:
+        1. Download file from R2
+        2. Process with Docling service (locally)
+        3. Generate embeddings (locally)
+        4. Store in Pinecone (locally)
+        No Vercel callbacks - everything happens here!
+        """
         job_id = job['id']
         r2_url = job['r2Url']
         filename = job['filename']
         file_type = job['fileType']
+        content_hash = job['contentHash']
 
-        import tempfile
         temp_path = None
+        start_time = datetime.now()
 
         try:
             logger.info(f"[DB Worker] 🚀 Starting job {job_id}: {filename}")
             logger.info(f"[DB Worker] 📋 Job details: type={file_type}, r2_url={r2_url[:50]}...")
 
-            # Update: Downloading file
-            logger.info(f"[DB Worker] ⬇️  Updating status to 'processing' (10%)")
+            # Step 1: Download file from R2
+            logger.info(f"[DB Worker] ⬇️  Step 1/4: Downloading file from R2...")
             self.update_job_status(job_id, 'processing', 10, 'Downloading file from R2...')
 
-            # Download file from R2
-            logger.info(f"[DB Worker] 🌐 Downloading file from R2: {r2_url}")
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.get(r2_url)
                 response.raise_for_status()
                 file_content = response.content
 
-            logger.info(f"[DB Worker] ✅ Downloaded {len(file_content)} bytes for job {job_id}")
+            logger.info(f"[DB Worker] ✅ Downloaded {len(file_content)} bytes")
 
             # Save to temporary file
             file_extension = filename.split('.')[-1] if '.' in filename else 'pdf'
-            logger.info(f"[DB Worker] 💾 Saving to temporary file with extension: {file_extension}")
             with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_extension}') as tmp:
                 tmp.write(file_content)
                 tmp.flush()
                 temp_path = tmp.name
 
-            logger.info(f"[DB Worker] ✅ Saved file to temporary path: {temp_path}")
+            logger.info(f"[DB Worker] ✅ Saved to temp file: {temp_path}")
 
-            # Update: Processing document with full pipeline
-            logger.info(f"[DB Worker] 🔄 Updating status to 'processing' (30%)")
-            self.update_job_status(job_id, 'processing', 30, 'Processing document with Docling, embedding, and storing...')
-            logger.info(f"[DB Worker] ✅ Status updated to 30%")
+            # Step 2: Process with Docling service (local call)
+            logger.info(f"[DB Worker] 🔄 Step 2/4: Processing with Docling...")
+            self.update_job_status(job_id, 'processing', 30, 'Processing document with Docling...')
 
-            # Call Vercel API to process document using the full document processor flow
-            # This will use Docling service internally, then embed and store in vector DB
-            logger.info(f"[DB Worker] 🔧 Getting environment variables...")
-            vercel_url = os.getenv('VERCEL_API_URL', 'http://localhost:3000')
-            logger.info(f"[DB Worker] ✅ Got VERCEL_API_URL")
-            api_key = os.getenv('DOCLING_API_KEY')
-            logger.info(f"[DB Worker] ✅ Got DOCLING_API_KEY")
+            # Import the docling processing function from main.py
+            from main import setup_docling_converter, extract_chunks_from_json
 
-            logger.info(f"[DB Worker] 🔗 Vercel API URL: {vercel_url}")
-            logger.info(f"[DB Worker] 🔑 API key configured: {bool(api_key)}")
+            converter = setup_docling_converter()
+            result = converter.convert(temp_path)
+            doc = result.document
+            doc_dict = doc.export_to_dict()
 
-            headers = {}
-            if api_key:
-                headers['x-api-key'] = api_key
+            # Extract chunks with images uploaded to R2
+            chunks = await extract_chunks_from_json(doc_dict, doc, filename)
+            total_pages = len(doc_dict.get('pages', []))
 
-            # Call a new endpoint that handles the full flow
-            endpoint = f'{vercel_url}/api/rag-documents/process-and-embed'
-            logger.info(f"[DB Worker] 📤 Calling process-and-embed endpoint: {endpoint}")
+            logger.info(f"[DB Worker] ✅ Docling extracted {len(chunks)} chunks from {total_pages} pages")
 
-            logger.info(f"[DB Worker] 🔧 Creating HTTP client with 600s timeout...")
-            async with httpx.AsyncClient(timeout=600.0) as client:
-                logger.info(f"[DB Worker] ✅ HTTP client created")
+            # Step 3: Generate embeddings and store in Pinecone
+            logger.info(f"[DB Worker] 🧠 Step 3/4: Generating embeddings and storing...")
+            self.update_job_status(job_id, 'processing', 60, 'Generating embeddings and storing in vector database...')
 
-                # Send file to process-and-embed endpoint
-                logger.info(f"[DB Worker] 📦 Preparing multipart request...")
-                logger.info(f"[DB Worker] 📂 Opening file: {temp_path}")
-                with open(temp_path, 'rb') as f:
-                    logger.info(f"[DB Worker] ✅ File opened successfully")
-                    files = {'file': (filename, f, file_type)}
-                    data = {
-                        'job_id': job_id,
-                        'content_hash': job['contentHash'],
-                        'r2_url': r2_url
+            # Import and use the vector service
+            from vector_service import VectorService
+
+            vector_service = VectorService()
+            await vector_service.initialize_index()
+
+            # Convert chunks to the format expected by vector service
+            chunks_for_storage = []
+            for chunk in chunks:
+                chunk_dict = {
+                    'content': chunk.content,
+                    'content_type': chunk.content_type,
+                    'page': chunk.page,
+                    'source': temp_path,
+                    'filename': filename,
+                    'content_hash': content_hash,
+                    'type': 'pdf' if file_type == 'application/pdf' else 'image',
+                }
+
+                # Add optional fields
+                if chunk.coordinates:
+                    chunk_dict['coordinates'] = {
+                        'x': chunk.coordinates.x,
+                        'y': chunk.coordinates.y,
+                        'width': chunk.coordinates.width,
+                        'height': chunk.coordinates.height,
                     }
-                    logger.info(f"[DB Worker] 📋 Request data prepared: job_id={job_id}, content_hash={job['contentHash'][:8]}...")
-                    logger.info(f"[DB Worker] 🚀 About to send POST request to {endpoint}...")
-                    logger.info(f"[DB Worker] 🔑 Headers: {list(headers.keys())}")
+                if chunk.image_data:
+                    chunk_dict['image_data'] = chunk.image_data
+                if chunk.image_url:
+                    chunk_dict['image_url'] = chunk.image_url
 
-                    try:
-                        response = await client.post(
-                            endpoint,
-                            files=files,
-                            data=data,
-                            headers=headers
-                        )
-                        logger.info(f"[DB Worker] 📥 POST request completed!")
-                    except Exception as post_error:
-                        logger.error(f"[DB Worker] ❌ POST request failed: {post_error}")
-                        logger.error(f"[DB Worker] ❌ Error type: {type(post_error).__name__}")
-                        raise
+                chunks_for_storage.append(chunk_dict)
 
-                    logger.info(f"[DB Worker] 📥 Received response: status={response.status_code}")
+            # Store all chunks
+            stored_count = await vector_service.store_chunks(chunks_for_storage)
 
-                    if response.status_code != 200:
-                        logger.error(f"[DB Worker] ❌ API returned non-200 status: {response.status_code}")
-                        logger.error(f"[DB Worker] ❌ Response body: {response.text[:500]}")
+            logger.info(f"[DB Worker] ✅ Stored {stored_count} chunks in Pinecone")
 
-                    response.raise_for_status()
-                    result = response.json()
-                    logger.info(f"[DB Worker] ✅ Response parsed successfully: {result}")
+            # Calculate processing time
+            processing_time_ms = int((datetime.now() - start_time).total_seconds() * 1000)
 
-            if not result.get('success'):
-                error_msg = result.get('error', 'Unknown error processing document')
-                logger.error(f"[DB Worker] ❌ Processing failed: {error_msg}")
-                raise Exception(error_msg)
+            # Check if any chunks were actually stored
+            if stored_count == 0:
+                logger.error(f"[DB Worker] ❌ No chunks were stored for job {job_id}")
+                self.update_job_status(
+                    job_id,
+                    'failed',
+                    100,
+                    'Processing failed: No chunks could be stored in vector database',
+                    error_message='All chunks were either duplicates or failed to embed',
+                    chunks_count=0,
+                    total_pages=total_pages,
+                    processing_time_ms=processing_time_ms
+                )
+                logger.info(f"[DB Worker] ⚠️ Job {job_id} marked as failed - no chunks stored")
+                return
 
-            chunks_count = result.get('chunks_stored', 0)
-            total_pages = result.get('total_pages', 0)
-
-            logger.info(f"[DB Worker] 🎉 Document processor completed job {job_id}")
-            logger.info(f"[DB Worker] 📊 Stats: {chunks_count} chunks stored, {total_pages} pages")
-
-            # Mark as completed
-            logger.info(f"[DB Worker] ✅ Marking job as completed (100%)")
+            # Step 4: Mark as completed
+            logger.info(f"[DB Worker] ✅ Step 4/4: Finalizing...")
             self.update_job_status(
                 job_id,
                 'completed',
                 100,
-                f'Successfully processed and stored {chunks_count} chunks',
-                chunks_count=chunks_count,
+                f'Successfully processed and stored {stored_count} chunks',
+                chunks_count=stored_count,
                 total_pages=total_pages,
-                processing_time_ms=result.get('processing_time_ms', 0)
+                processing_time_ms=processing_time_ms
             )
 
-            logger.info(f"[DB Worker] 🏁 Job {job_id} completed successfully")
+            logger.info(f"[DB Worker] 🎉 Job {job_id} completed successfully in {processing_time_ms}ms")
 
         except Exception as e:
             logger.error(f"[DB Worker] ❌ Error processing job {job_id}: {e}")

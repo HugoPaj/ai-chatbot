@@ -15,11 +15,14 @@ import logging
 import time
 import httpx
 import asyncio
+import hashlib
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+import boto3
+from botocore.exceptions import ClientError
 
 try:
     from docling.document_converter import DocumentConverter
@@ -78,6 +81,86 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# R2 Configuration
+R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID")
+R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
+R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
+R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
+R2_PUBLIC_URL = os.getenv("R2_PUBLIC_URL")
+
+# Log R2 configuration for debugging (without secrets)
+logger.info(f"R2 Config - Account ID: {R2_ACCOUNT_ID[:8] if R2_ACCOUNT_ID else 'NOT SET'}...")
+logger.info(f"R2 Config - Bucket: {R2_BUCKET_NAME}")
+logger.info(f"R2 Config - Public URL: {R2_PUBLIC_URL or 'NOT SET'}")
+
+# Initialize R2 client if credentials are available
+r2_client = None
+if R2_ACCOUNT_ID and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME:
+    try:
+        # Construct endpoint URL
+        endpoint_url = f'https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com'
+        logger.info(f"R2 Endpoint URL: {endpoint_url}")
+
+        r2_client = boto3.client(
+            's3',
+            endpoint_url=endpoint_url,
+            aws_access_key_id=R2_ACCESS_KEY_ID,
+            aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+            region_name='auto',
+            config=boto3.session.Config(
+                signature_version='s3v4',
+                s3={'addressing_style': 'path'}
+            )
+        )
+        logger.info(f"✅ R2 client initialized for bucket: {R2_BUCKET_NAME}")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize R2 client: {e}")
+        r2_client = None
+else:
+    logger.warning("⚠️  R2 credentials not configured - images will be returned as base64")
+    logger.warning(f"   Missing: {', '.join([k for k, v in {'R2_ACCOUNT_ID': R2_ACCOUNT_ID, 'R2_ACCESS_KEY_ID': R2_ACCESS_KEY_ID, 'R2_SECRET_ACCESS_KEY': R2_SECRET_ACCESS_KEY, 'R2_BUCKET_NAME': R2_BUCKET_NAME}.items() if not v])}")
+
+def upload_image_to_r2(image_base64: str, image_index: int) -> Optional[str]:
+    """
+    Upload an image to R2 storage and return the public URL
+    Returns None if R2 is not configured or upload fails
+    """
+    if not r2_client or not R2_BUCKET_NAME:
+        logger.debug("R2 not configured, skipping upload")
+        return None
+
+    try:
+        # Generate unique filename using hash of image data
+        image_hash = hashlib.md5(image_base64.encode()).hexdigest()[:16]
+        image_filename = f"doc-images/{image_hash}.png"
+
+        # Decode base64 to bytes
+        image_bytes = base64.b64decode(image_base64)
+
+        # Upload to R2
+        r2_client.put_object(
+            Bucket=R2_BUCKET_NAME,
+            Key=image_filename,
+            Body=image_bytes,
+            ContentType='image/png'
+        )
+
+        # Generate public URL
+        if R2_PUBLIC_URL:
+            public_url = f"{R2_PUBLIC_URL}/{image_filename}"
+        else:
+            public_url = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com/{R2_BUCKET_NAME}/{image_filename}"
+
+        logger.info(f"✅ Uploaded image {image_index} to R2: {public_url}")
+        return public_url
+
+    except ClientError as e:
+        logger.error(f"❌ Failed to upload image {image_index} to R2: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"❌ Unexpected error uploading image {image_index}: {e}")
+        return None
+
 # Response models
 class Coordinates(BaseModel):
     x: float
@@ -96,6 +179,7 @@ class ProcessedChunk(BaseModel):
     page: Optional[int] = None
     coordinates: Optional[Coordinates] = None
     image_data: Optional[str] = None  # Base64 encoded image
+    image_url: Optional[str] = None  # R2 URL for uploaded image
     table_structure: Optional[TableStructure] = None
 
 class ProcessingResponse(BaseModel):
@@ -506,12 +590,21 @@ async def extract_chunks_from_json(doc_dict: dict, doc: DoclingDocument, filenam
                         filename
                     )
                     content = f"{vision_description} (Page {img_info['page_no']} from {filename}){img_info['caption_text']}"
+
+                    # Upload image to R2 (if configured)
+                    image_url = upload_image_to_r2(img_info['image_data'], img_info['index'])
+
+                    # If R2 upload succeeded, clear base64 data to save bandwidth
+                    # Otherwise keep base64 as fallback
+                    image_data = None if image_url else img_info['image_data']
+
                     return ProcessedChunk(
                         content=content,
                         content_type='image',
                         page=img_info['page_no'],
                         coordinates=None,
-                        image_data=img_info['image_data']
+                        image_data=image_data,
+                        image_url=image_url
                     )
                 except Exception as e:
                     logger.warning(f"Failed to process image {img_info['index']}: {e}")
