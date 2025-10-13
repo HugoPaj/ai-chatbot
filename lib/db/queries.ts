@@ -71,6 +71,24 @@ export async function createUser(email: string, password: string) {
   }
 }
 
+export async function createSSOUser(email: string, orgId?: string) {
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    const [newUser] = await db
+      .insert(user)
+      .values({
+        email: normalizedEmail,
+        password: null, // SSO users don't have passwords
+        orgId: orgId || null,
+        isVerified: true, // SSO users are automatically verified
+      })
+      .returning();
+    return newUser;
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to create SSO user');
+  }
+}
+
 export async function saveChat({
   id,
   userId,

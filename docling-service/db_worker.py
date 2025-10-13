@@ -200,6 +200,7 @@ class DatabaseWorker:
                     'filename': filename,
                     'content_hash': content_hash,
                     'type': 'pdf' if file_type == 'application/pdf' else 'image',
+                    'pdf_url': r2_url,  # Add the permanent R2 URL for PDF linking
                 }
 
                 # Add optional fields

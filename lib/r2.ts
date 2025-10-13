@@ -5,6 +5,7 @@ import {
   DeleteObjectCommand,
   type PutObjectCommandInput,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // R2 Configuration
 const r2Config = {
@@ -195,5 +196,48 @@ export const get = async (pathname: string): Promise<Buffer | null> => {
   } catch (error) {
     console.error('R2 get failed:', error);
     return null;
+  }
+};
+
+/**
+ * Generate a presigned URL for client-side uploads
+ * This bypasses Vercel's 4.5MB body size limit
+ *
+ * Security features:
+ * - HTTPS-only URLs (enforced)
+ * - Short expiration time (default 1 hour)
+ * - Content-Type enforcement to prevent XSS
+ */
+export const generatePresignedUploadUrl = async (
+  pathname: string,
+  contentType: string,
+  expiresIn: number = 3600, // 1 hour default
+): Promise<string> => {
+  try {
+    const client = getR2Client();
+
+    const command = new PutObjectCommand({
+      Bucket: r2Config.bucketName,
+      Key: pathname,
+      ContentType: contentType,
+    });
+
+    const presignedUrl = await getSignedUrl(client, command, {
+      expiresIn,
+      // Ensure HTTPS is used (AWS SDK default, but explicit for security)
+      unhoistableHeaders: new Set(['x-amz-server-side-encryption']),
+    });
+
+    // Verify the URL uses HTTPS (security check)
+    if (!presignedUrl.startsWith('https://')) {
+      throw new Error('Presigned URL must use HTTPS');
+    }
+
+    return presignedUrl;
+  } catch (error) {
+    console.error('Failed to generate presigned URL:', error);
+    throw new Error(
+      `Failed to generate presigned URL: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
   }
 };

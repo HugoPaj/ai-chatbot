@@ -2,7 +2,12 @@ import { compare } from 'bcrypt-ts';
 import NextAuth, { type DefaultSession } from 'next-auth';
 import type { Provider } from 'next-auth/providers';
 import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id';
-import { getUser, isVerifiedOrgEmail } from '@/lib/db/queries';
+import {
+  getUser,
+  isVerifiedOrgEmail,
+  getOrgByDomain,
+  createSSOUser,
+} from '@/lib/db/queries';
 import { authConfig } from './auth.config';
 import { DUMMY_PASSWORD } from '@/lib/constants';
 import { isAdminEmail } from '@/lib/auth/admin';
@@ -15,12 +20,14 @@ declare module 'next-auth' {
     user: {
       id: string;
       type: UserType;
+      name?: string | null;
     } & DefaultSession['user'];
   }
 
   interface User {
     id?: string;
     email?: string | null;
+    name?: string | null;
     type: UserType;
   }
 }
@@ -42,6 +49,10 @@ export const {
   trustHost: true, // Required for Vercel/serverless deployments
   session: {
     strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+  jwt: {
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   secret: process.env.AUTH_SECRET,
   providers: [
@@ -54,7 +65,8 @@ export const {
             issuer: `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID}/v2.0`,
             authorization: {
               params: {
-                scope: 'openid profile email User.Read',
+                scope: 'openid profile email offline_access',
+                response_type: 'code',
               },
             },
           }),
@@ -104,33 +116,82 @@ export const {
     },
   ] as Provider[],
   callbacks: {
-    async jwt({ token, user, account }) {
-      if (user) {
+    async jwt({ token, user, account, profile }) {
+      // Handle initial sign in
+      if (account?.provider === 'microsoft-entra-id') {
+        const email =
+          user?.email ||
+          (profile as any)?.email ||
+          (profile as any)?.preferred_username;
+
+        if (!email) {
+          throw new Error('No email address found in Microsoft account');
+        }
+
+        // Extract name from Microsoft profile
+        const name =
+          user?.name ||
+          (profile as any)?.name ||
+          (profile as any)?.displayName ||
+          email.split('@')[0]; // Fallback to email prefix
+
+        const normalizedEmail = email.trim().toLowerCase();
+        const existingUsers = await getUser(normalizedEmail);
+
+        if (existingUsers.length === 0) {
+          // Check if user's domain is from a verified organization
+          const domain = normalizedEmail.split('@')[1];
+          const organization = await getOrgByDomain(domain);
+
+          if (organization?.isActive) {
+            // Auto-create user for verified organization domain
+            const newUser = await createSSOUser(
+              normalizedEmail,
+              organization.id,
+            );
+            token.id = newUser.id;
+            token.type = isAdminEmail(normalizedEmail) ? 'admin' : 'free';
+            token.name = name; // Store name in token
+          } else {
+            // Domain not verified - reject login
+            throw new Error('Access denied: Organization not verified');
+          }
+        } else {
+          // Existing user
+          token.id = existingUsers[0].id;
+          token.type = isAdminEmail(normalizedEmail) ? 'admin' : 'free';
+          token.name = name; // Store name in token
+        }
+      } else if (user) {
+        // Handle credentials login
         token.id = user.id as string;
         token.type = user.type;
       }
 
-      // Auto-provision SSO users on first login
-      if (account?.provider === 'microsoft-entra-id' && user?.email) {
-        const normalizedEmail = user.email.trim().toLowerCase();
-        const existingUsers = await getUser(normalizedEmail);
-
-        if (existingUsers.length === 0) {
-          // Create new user for SSO login
-          // Note: This assumes you have a createUser function
-          // For now, SSO users will need to be manually added to DB
-          console.log('SSO user needs to be created:', normalizedEmail);
-        } else {
-          token.id = existingUsers[0].id;
-          token.type = isAdminEmail(normalizedEmail) ? 'admin' : 'free';
-        }
+      // Ensure token has required fields
+      if (!token.id && token.sub) {
+        // Fallback for subsequent requests
+        token.id = token.sub;
       }
 
-      return token;
+      // Ensure token.type has a value
+      if (!token.type) {
+        token.type =
+          token.email && isAdminEmail(token.email as string) ? 'admin' : 'free';
+      }
+
+      // Ensure we return a proper JWT token object
+      return {
+        ...token,
+        id: token.id || token.sub || '',
+        type: token.type || 'free',
+        name: token.name || token.email || null,
+      };
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id;
+        session.user.name = token.name || token.email || null;
         // Fallback for existing sessions without type
         session.user.type =
           token.type ||

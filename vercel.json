@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "app/(chat)/api/rag-documents/route.ts": {
+      "maxDuration": 30
+    }
+  }
+}

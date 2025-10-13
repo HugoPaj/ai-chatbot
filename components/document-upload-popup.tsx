@@ -209,10 +209,10 @@ export function DocumentUploadPopup() {
       return 'Unsupported file type. Please upload PDF, JPEG, or PNG files only.';
     }
 
-    // Check file size (10MB max)
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    // Check file size (20MB max)
+    const maxSize = 20 * 1024 * 1024; // 20MB
     if (file.size > maxSize) {
-      return 'File too large. Maximum file size is 10MB.';
+      return 'File too large. Maximum file size is 20MB.';
     }
 
     return null;
@@ -223,31 +223,123 @@ export function DocumentUploadPopup() {
     fileIndex: number,
   ): Promise<{ success: boolean; message: string; chunks?: number; jobId?: string }> => {
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
       // Update to uploading state
       setUploadStatuses((prev) =>
         prev.map((status, index) =>
           index === fileIndex
-            ? { ...status, status: 'uploading', message: 'Uploading file...', progress: 0 }
+            ? { ...status, status: 'uploading', message: 'Calculating hash...', progress: 0 }
+            : status,
+        ),
+      );
+
+      // Step 1: Calculate content hash FIRST (before uploading)
+      const buffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const contentHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+      // Step 2: Check for duplicates BEFORE uploading to R2
+      setUploadStatuses((prev) =>
+        prev.map((status, index) =>
+          index === fileIndex
+            ? { ...status, message: 'Checking for duplicates...', progress: 20 }
+            : status,
+        ),
+      );
+
+      const duplicateResponse = await fetch('/api/rag-documents/check-duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contentHash }),
+      });
+
+      if (!duplicateResponse.ok) {
+        throw new Error('Failed to check for duplicates');
+      }
+
+      const duplicateCheck = await duplicateResponse.json();
+
+      if (duplicateCheck.exists) {
+        return {
+          success: false,
+          message: `This document already exists in the knowledge base as "${duplicateCheck.filename}". Uploading it again would replace the existing version.`,
+        };
+      }
+
+      // Step 3: Get presigned upload URL
+      setUploadStatuses((prev) =>
+        prev.map((status, index) =>
+          index === fileIndex
+            ? { ...status, message: 'Preparing upload...', progress: 40 }
+            : status,
+        ),
+      );
+
+      const urlResponse = await fetch('/api/rag-documents/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+        }),
+      });
+
+      if (!urlResponse.ok) {
+        throw new Error('Failed to get upload URL');
+      }
+
+      const { uploadUrl, r2Key } = await urlResponse.json();
+
+      // Step 4: Upload directly to R2 using presigned URL
+      setUploadStatuses((prev) =>
+        prev.map((status, index) =>
+          index === fileIndex
+            ? { ...status, message: 'Uploading to storage...', progress: 60 }
+            : status,
+        ),
+      );
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload file to storage');
+      }
+
+      // Step 5: Notify backend and create processing job
+      setUploadStatuses((prev) =>
+        prev.map((status, index) =>
+          index === fileIndex
+            ? { ...status, message: 'Creating processing job...', progress: 80 }
             : status,
         ),
       );
 
       const response = await fetch('/api/rag-documents', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          r2Key,
+          filename: file.name,
+          fileSize: file.size.toString(),
+          fileType: file.type,
+          contentHash,
+        }),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to upload document');
+        throw new Error(error.message || 'Failed to create processing job');
       }
 
       const uploadResult = await response.json();
 
-      // Check if it's a duplicate
+      // Check if it's a duplicate (shouldn't happen since we checked earlier)
       if (uploadResult.error === 'duplicate') {
         return {
           success: false,
@@ -388,7 +480,7 @@ export function DocumentUploadPopup() {
               <AlertCircle className="size-4 mt-0.5 shrink-0" />
               <div>
                 <p>You can select multiple files at once for batch upload.</p>
-                <p className="mt-1">Maximum file size: 10MB per file</p>
+                <p className="mt-1">Maximum file size: 20MB per file</p>
               </div>
             </div>
           </div>

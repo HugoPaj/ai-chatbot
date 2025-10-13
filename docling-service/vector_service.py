@@ -189,6 +189,8 @@ class VectorService:
                     # Add optional fields
                     if chunk.get('coordinates'):
                         pinecone_metadata['coordinates'] = json.dumps(chunk['coordinates'])
+                    if chunk.get('pdf_url'):
+                        pinecone_metadata['pdfUrl'] = chunk['pdf_url']
                     if chunk.get('image_url'):
                         pinecone_metadata['relatedImageUrls'] = json.dumps([chunk['image_url']])
                     elif chunk.get('related_image_urls'):

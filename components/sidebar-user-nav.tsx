@@ -27,7 +27,6 @@ export function SidebarUserNav({ user }: { user: User }) {
   const { data, status } = useSession();
   const { setTheme, resolvedTheme } = useTheme();
 
-
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -58,7 +57,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                   className="rounded-full"
                 />
                 <span data-testid="user-email" className="truncate">
-                  {user?.email}
+                  {user?.name || user?.email}
                 </span>
                 <ChevronUp className="ml-auto" />
               </SidebarMenuButton>

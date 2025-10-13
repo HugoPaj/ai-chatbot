@@ -20,6 +20,7 @@ import hashlib
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 import uvicorn
 import boto3
 from botocore.exceptions import ClientError
@@ -41,10 +42,37 @@ except ImportError:
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan (startup and shutdown)"""
+    # Startup
+    try:
+        from db_worker import start_worker
+        start_worker()
+        logger.info("Application started with database worker")
+    except ImportError:
+        logger.warning("db_worker module not found - continuing without database worker")
+    except Exception as e:
+        logger.error(f"Failed to start database worker: {e}")
+        logger.warning("Application will continue without database worker")
+
+    yield
+
+    # Shutdown
+    try:
+        from db_worker import stop_worker
+        stop_worker()
+        logger.info("Application shutdown complete")
+    except ImportError:
+        logger.debug("db_worker not available for shutdown")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+
 app = FastAPI(
     title="Docling Document Processing Service",
     description="Advanced document processing with layout analysis, table extraction, and figure detection",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Configure multipart upload limits to prevent memory issues
@@ -733,24 +761,6 @@ async def process_document(file: UploadFile = File(..., max_size=MAX_UPLOAD_SIZE
                 logger.debug(f"Cleaned up temporary file: {temp_path}")
             except Exception as e:
                 logger.warning(f"Failed to cleanup temp file {temp_path}: {e}")
-
-@app.on_event("startup")
-async def startup_event():
-    """Start background worker on app startup"""
-    try:
-        from db_worker import start_worker
-        start_worker()
-        logger.info("Application started with database worker")
-    except Exception as e:
-        logger.error(f"Failed to start database worker: {e}")
-        logger.warning("Application will continue without database worker")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Stop background worker on app shutdown"""
-    from db_worker import stop_worker
-    stop_worker()
-    logger.info("Application shutdown complete")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8001))

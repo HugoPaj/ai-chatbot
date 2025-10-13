@@ -19,10 +19,12 @@
    - **Name:** `AI Chatbot Dev`
    - **Supported account types:** "Accounts in this organizational directory only (Single tenant)"
    - **Redirect URI:**
-     - Platform: `Web`
+     - Platform: `Web` ⚠️ **CRITICAL: Must be "Web", NOT "SPA"!** ⚠️
      - URL: `http://localhost:3000/api/auth/callback/microsoft-entra-id`
      - **Note:** If your dev server runs on port 3001, use `http://localhost:3001/api/auth/callback/microsoft-entra-id`
 5. **Click:** Register
+
+> **⚠️ IMPORTANT:** The platform MUST be configured as "Web" not "SPA" (Single Page Application). Choosing "SPA" will cause a "JWTs must use Compact JWS serialization" error. This is because Web and SPA platforms send different token formats.
 
 ### Get Your Credentials
 

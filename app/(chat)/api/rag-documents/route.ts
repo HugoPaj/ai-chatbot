@@ -1,16 +1,13 @@
 import { auth } from '@/app/(auth)/auth';
-import { put } from '@/lib/r2';
 import { ChatSDKError } from '@/lib/errors';
-import { generateUUID } from '@/lib/utils';
-import crypto from 'node:crypto';
 import { db } from '@/lib/db';
 import { documentProcessingJob } from '@/lib/db/schema';
 
 // Quick endpoint - just creates job and returns immediately (no timeout issues!)
 export const maxDuration = 30;
 
-// Maximum file size: 10MB
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+// Maximum file size: 20MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 // Supported file types
 const SUPPORTED_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
 
@@ -22,77 +19,54 @@ export async function POST(request: Request) {
       return new ChatSDKError('unauthorized:api').toResponse();
     }
 
-    // Get form data
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
+    // Get JSON data (r2Key and metadata from client-side upload)
+    const { r2Key, filename, fileSize, fileType, contentHash } = await request.json();
 
-    if (!file) {
+    if (!r2Key || !filename || !fileSize || !fileType || !contentHash) {
       return new ChatSDKError(
         'bad_request:api',
-        'No file provided',
+        'Missing required fields',
       ).toResponse();
     }
 
-    // Check file size
-    if (file.size > MAX_FILE_SIZE) {
+    // Validate file size
+    const fileSizeNum = Number.parseInt(fileSize);
+    if (fileSizeNum > MAX_FILE_SIZE) {
       return new ChatSDKError(
         'bad_request:api',
-        'File exceeds maximum size of 10MB',
+        'File exceeds maximum size of 20MB',
       ).toResponse();
     }
 
-    // Check file type
-    if (!SUPPORTED_TYPES.includes(file.type)) {
+    // Validate file type
+    if (!SUPPORTED_TYPES.includes(fileType)) {
       return new ChatSDKError(
         'bad_request:api',
         'Unsupported file type. Please upload PDF, JPEG, or PNG files',
       ).toResponse();
     }
 
-    const fileId = generateUUID();
-    const fileName = file.name;
-    const sanitizedFileName = fileName.replace(/[<>:"/\\|?*]/g, '_');
+    console.log(`[RAG] Processing uploaded file: ${filename}`);
 
-    // Upload file to R2 storage for later processing
-    const r2Key = `pending-docs/${fileId}-${sanitizedFileName}`;
-    console.log(`[RAG] Uploading file to R2: ${fileName}`);
-    const r2Upload = await put(r2Key, file, {
-      access: 'public',
-      contentType: file.type,
-    });
-    console.log(`[RAG] File uploaded to R2: ${r2Upload.url}`);
+    // Generate the public URL for the uploaded file
+    const r2Config = {
+      publicUrl: process.env.R2_PUBLIC_URL,
+      accountId: process.env.R2_ACCOUNT_ID,
+      bucketName: process.env.R2_BUCKET_NAME,
+    };
 
-    // Calculate content hash for deduplication
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const contentHash = crypto
-      .createHash('sha256')
-      .update(buffer)
-      .digest('hex');
+    const encodedPathname = r2Key
+      .split('/')
+      .map((segment: string) => encodeURIComponent(segment))
+      .join('/');
 
-    console.log(`[RAG] Checking for duplicate document...`);
+    const r2Url = r2Config.publicUrl
+      ? `${r2Config.publicUrl}/${encodedPathname}`
+      : `https://${r2Config.accountId}.r2.cloudflarestorage.com/${r2Config.bucketName}/${encodedPathname}`;
+
+    console.log(`[RAG] File URL: ${r2Url}`);
     console.log(`[RAG] Content hash: ${contentHash.substring(0, 16)}...`);
-
-    // Check if document already exists in vector database
-    const { VectorStore } = await import('@/lib/ai/vectorStore');
-    const vectorStore = new VectorStore();
-    await vectorStore.initialize();
-
-    const duplicateCheck = await vectorStore.checkDuplicateDocument(contentHash);
-
-    if (duplicateCheck.exists) {
-      console.log(
-        `[RAG] Duplicate document detected: ${duplicateCheck.filename}`,
-      );
-      return Response.json({
-        success: false,
-        error: 'duplicate',
-        message: `This document already exists in the knowledge base as "${duplicateCheck.filename}". Uploading it again would replace the existing version.`,
-        existingFilename: duplicateCheck.filename,
-        contentHash: contentHash.substring(0, 16),
-      });
-    }
-
-    console.log(`[RAG] No duplicate found, proceeding with upload...`);
+    console.log(`[RAG] Creating processing job (duplicate check already done by client)...`);
 
     // Create job in database - Cloud Run worker will pick it up and process
     const [job] = await db
@@ -100,13 +74,13 @@ export async function POST(request: Request) {
       .values({
         // biome-ignore lint: Forbidden non-null assertion
         userId: session.user.id!,
-        filename: sanitizedFileName,
-        fileSize: file.size.toString(),
-        fileType: file.type,
+        filename,
+        fileSize,
+        fileType,
         status: 'queued',
         progress: '0',
         message: 'Waiting for processing...',
-        r2Url: r2Upload.url,
+        r2Url,
         contentHash,
       })
       .returning();
@@ -120,7 +94,7 @@ export async function POST(request: Request) {
       status: 'queued',
       message:
         'Document uploaded and queued for processing. Poll /api/rag-documents/status/{job_id} for updates.',
-      filename: file.name,
+      filename,
     });
   } catch (error) {
     console.error('Error in document upload:', error);
