@@ -150,6 +150,7 @@ export const {
               organization.id,
             );
             token.id = newUser.id;
+            token.email = normalizedEmail; // Store email in token
             token.type = isAdminEmail(normalizedEmail) ? 'admin' : 'free';
             token.name = name; // Store name in token
           } else {
@@ -159,12 +160,14 @@ export const {
         } else {
           // Existing user
           token.id = existingUsers[0].id;
+          token.email = normalizedEmail; // Store email in token
           token.type = isAdminEmail(normalizedEmail) ? 'admin' : 'free';
           token.name = name; // Store name in token
         }
       } else if (user) {
         // Handle credentials login
         token.id = user.id as string;
+        token.email = user.email as string; // Store email in token
         token.type = user.type;
       }
 
@@ -184,13 +187,15 @@ export const {
       return {
         ...token,
         id: token.id || token.sub || '',
+        email: token.email || null,
         type: token.type || 'free',
-        name: token.name || token.email || null,
+        name: token.name || null,
       };
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id;
+        session.user.email = token.email as string || session.user.email;
         session.user.name = token.name || token.email || null;
         // Fallback for existing sessions without type
         session.user.type =

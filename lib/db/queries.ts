@@ -888,3 +888,164 @@ export async function updateOrgAdminPermissions({
     );
   }
 }
+
+// User dashboard statistics
+export async function getUserStatistics(userId: string) {
+  try {
+    // Get today's date
+    const today = new Date().toISOString().split('T')[0];
+
+    // Get total chat count
+    const chatCount = await db
+      .select({ count: count(chat.id) })
+      .from(chat)
+      .where(eq(chat.userId, userId))
+      .execute();
+
+    // Get total message count
+    const messageCount = await db
+      .select({ count: count(message.id) })
+      .from(message)
+      .innerJoin(chat, eq(message.chatId, chat.id))
+      .where(and(eq(chat.userId, userId), eq(message.role, 'user')))
+      .execute();
+
+    // Get today's usage
+    const todayUsage = await getDailyUsage({ userId, date: today });
+
+    // Get this week's usage (last 7 days)
+    const weeklyUsage = await getWeeklyUsage(userId);
+
+    // Get this month's usage
+    const monthlyUsage = await getMonthlyUsage(userId);
+
+    // Get recent chats
+    const recentChatsResult = await getChatsByUserId({
+      id: userId,
+      limit: 5,
+      startingAfter: null,
+      endingBefore: null
+    });
+
+    return {
+      totalChats: chatCount[0]?.count ?? 0,
+      totalMessages: messageCount[0]?.count ?? 0,
+      todayUsage,
+      weeklyUsage,
+      monthlyUsage,
+      recentChats: recentChatsResult.chats,
+    };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user statistics',
+    );
+  }
+}
+
+export async function getWeeklyUsage(userId: string): Promise<number> {
+  try {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const startDate = sevenDaysAgo.toISOString().split('T')[0];
+
+    const usage = await db
+      .select()
+      .from(dailyUsage)
+      .where(
+        and(
+          eq(dailyUsage.userId, userId),
+          gte(dailyUsage.date, startDate)
+        )
+      )
+      .execute();
+
+    return usage.reduce(
+      (sum, day) => sum + Number.parseInt(day.requestCount, 10),
+      0,
+    );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get weekly usage',
+    );
+  }
+}
+
+export async function getMonthlyUsage(userId: string): Promise<number> {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const startDate = thirtyDaysAgo.toISOString().split('T')[0];
+
+    const usage = await db
+      .select()
+      .from(dailyUsage)
+      .where(
+        and(
+          eq(dailyUsage.userId, userId),
+          gte(dailyUsage.date, startDate)
+        )
+      )
+      .execute();
+
+    return usage.reduce(
+      (sum, day) => sum + Number.parseInt(day.requestCount, 10),
+      0,
+    );
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get monthly usage',
+    );
+  }
+}
+
+export async function getUserDailyUsageHistory(
+  userId: string,
+  days = 7
+): Promise<Array<{ date: string; count: number }>> {
+  try {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    const startDateString = startDate.toISOString().split('T')[0];
+
+    const usage = await db
+      .select({
+        date: dailyUsage.date,
+        requestCount: dailyUsage.requestCount,
+      })
+      .from(dailyUsage)
+      .where(
+        and(
+          eq(dailyUsage.userId, userId),
+          gte(dailyUsage.date, startDateString)
+        )
+      )
+      .orderBy(asc(dailyUsage.date))
+      .execute();
+
+    // Fill in missing days with 0
+    const usageMap = new Map(
+      usage.map((u) => [u.date, Number.parseInt(u.requestCount, 10)])
+    );
+
+    const result: Array<{ date: string; count: number }> = [];
+    for (let i = days; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateString = date.toISOString().split('T')[0];
+      result.push({
+        date: dateString,
+        count: usageMap.get(dateString) ?? 0,
+      });
+    }
+
+    return result;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get user daily usage history',
+    );
+  }
+}
