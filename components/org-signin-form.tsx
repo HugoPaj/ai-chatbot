@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Mail, Lock, AlertCircle } from 'lucide-react';
+import { normalizeEmail } from '@/lib/db/utils';
 
 interface OrgSignInFormProps {
   redirectUrl?: string;
@@ -30,7 +31,7 @@ export function OrgSignInForm({ redirectUrl }: OrgSignInFormProps) {
     setError('');
 
     // Validate organization email format
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
     const domain = normalizedEmail.split('@')[1];
     if (!domain || !email.includes('@')) {
       setError('Please enter a valid organization email address');

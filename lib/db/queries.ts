@@ -34,7 +34,7 @@ import {
   orgAdmin,
 } from './schema';
 import type { ArtifactKind } from '@/components/artifact';
-import { generateHashedPassword } from './utils';
+import { generateHashedPassword, normalizeEmail } from './utils';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { ChatSDKError } from '../errors';
 
@@ -48,7 +48,7 @@ const db = drizzle(client);
 
 export async function getUser(email: string): Promise<Array<User>> {
   try {
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
     return await db.select().from(user).where(eq(user.email, normalizedEmail));
   } catch (error) {
     throw new ChatSDKError(
@@ -62,7 +62,7 @@ export async function createUser(email: string, password: string) {
   const hashedPassword = generateHashedPassword(password);
 
   try {
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
     return await db
       .insert(user)
       .values({ email: normalizedEmail, password: hashedPassword });
@@ -73,7 +73,7 @@ export async function createUser(email: string, password: string) {
 
 export async function createSSOUser(email: string, orgId?: string) {
   try {
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
     const [newUser] = await db
       .insert(user)
       .values({
@@ -943,27 +943,35 @@ export async function getUserStatistics(userId: string) {
   }
 }
 
+// Helper function for getting usage over a period of days
+async function getUsageForPeriod(
+  userId: string,
+  days: number
+): Promise<number> {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  const startDateString = startDate.toISOString().split('T')[0];
+
+  const usage = await db
+    .select()
+    .from(dailyUsage)
+    .where(
+      and(
+        eq(dailyUsage.userId, userId),
+        gte(dailyUsage.date, startDateString)
+      )
+    )
+    .execute();
+
+  return usage.reduce(
+    (sum, day) => sum + Number.parseInt(day.requestCount, 10),
+    0,
+  );
+}
+
 export async function getWeeklyUsage(userId: string): Promise<number> {
   try {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const startDate = sevenDaysAgo.toISOString().split('T')[0];
-
-    const usage = await db
-      .select()
-      .from(dailyUsage)
-      .where(
-        and(
-          eq(dailyUsage.userId, userId),
-          gte(dailyUsage.date, startDate)
-        )
-      )
-      .execute();
-
-    return usage.reduce(
-      (sum, day) => sum + Number.parseInt(day.requestCount, 10),
-      0,
-    );
+    return await getUsageForPeriod(userId, 7);
   } catch (error) {
     throw new ChatSDKError(
       'bad_request:database',
@@ -974,25 +982,7 @@ export async function getWeeklyUsage(userId: string): Promise<number> {
 
 export async function getMonthlyUsage(userId: string): Promise<number> {
   try {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const startDate = thirtyDaysAgo.toISOString().split('T')[0];
-
-    const usage = await db
-      .select()
-      .from(dailyUsage)
-      .where(
-        and(
-          eq(dailyUsage.userId, userId),
-          gte(dailyUsage.date, startDate)
-        )
-      )
-      .execute();
-
-    return usage.reduce(
-      (sum, day) => sum + Number.parseInt(day.requestCount, 10),
-      0,
-    );
+    return await getUsageForPeriod(userId, 30);
   } catch (error) {
     throw new ChatSDKError(
       'bad_request:database',

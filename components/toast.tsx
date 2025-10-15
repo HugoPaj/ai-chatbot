@@ -16,6 +16,14 @@ export function toast(props: Omit<ToastProps, 'id'>) {
   ));
 }
 
+export function showError(description: string) {
+  return toast({ type: 'error', description });
+}
+
+export function showSuccess(description: string) {
+  return toast({ type: 'success', description });
+}
+
 function Toast(props: ToastProps) {
   const { id, type, description } = props;
 
