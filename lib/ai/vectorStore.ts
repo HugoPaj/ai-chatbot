@@ -837,4 +837,57 @@ export class VectorStore {
       return [];
     }
   }
+
+  /**
+   * Get ALL chunks from a specific document by filename
+   * Used for full document loading in broad query path
+   * @param filename - The filename to retrieve all chunks for
+   * @returns Promise<SearchResult[]> - All chunks from the document
+   */
+  async getAllChunksByFilename(filename: string): Promise<SearchResult[]> {
+    try {
+      console.log(`[VectorStore] Fetching all chunks for "${filename}"...`);
+      const index = this.pinecone.index(this.indexName);
+
+      // Create a dummy embedding for querying
+      const dummyEmbedding = new Array(1536).fill(0);
+
+      // Query with filter for the specific filename
+      const queryResponse = await index.query({
+        vector: dummyEmbedding,
+        topK: 10000, // High limit to get all chunks
+        includeMetadata: true,
+        includeValues: false,
+        filter: {
+          filename: { $eq: filename },
+        },
+      });
+
+      const allChunks =
+        queryResponse.matches?.map((match) => ({
+          score: 1.0, // Not ranked by relevance, just fetching all chunks
+          metadata: match.metadata as unknown as SearchResult['metadata'],
+        })) || [];
+
+      // Filter to parent chunks only (or legacy chunks without chunkType)
+      // This avoids duplicate content from child chunks
+      const parentChunks = allChunks.filter(
+        (chunk) =>
+          chunk.metadata.chunkType === 'parent' ||
+          !chunk.metadata.chunkType,
+      );
+
+      console.log(
+        `[VectorStore] Retrieved ${parentChunks.length} parent chunks (${allChunks.length} total) for "${filename}"`,
+      );
+
+      return parentChunks;
+    } catch (error) {
+      console.error(
+        `[VectorStore] Error retrieving all chunks for "${filename}":`,
+        error,
+      );
+      return [];
+    }
+  }
 }

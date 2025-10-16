@@ -311,8 +311,7 @@ export async function POST(request: Request) {
               }
               if (cacheMetrics.cacheReadInputTokens) {
                 console.log(`[Cache] ✅ Cache READ: ${cacheMetrics.cacheReadInputTokens} tokens read from cache`);
-                const savings = ((cacheMetrics.cacheReadInputTokens * 0.9) / cacheMetrics.cacheReadInputTokens * 100).toFixed(1);
-                console.log(`[Cache] 💰 Cost savings: ~${savings}% on cached tokens`);
+                console.log(`[Cache] 💰 Cost savings: ~90% on cached tokens`);
               }
             }
 

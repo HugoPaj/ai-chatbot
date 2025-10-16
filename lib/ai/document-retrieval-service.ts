@@ -78,11 +78,6 @@ export class DocumentRetrievalService {
       const classification = await classifyQuery(userMessageText);
       queryType = classification.type;
 
-      console.log(
-        `[RAG] Query classified as: ${queryType.toUpperCase()} (confidence: ${classification.confidence})`,
-      );
-      console.log(`[RAG] Reasoning: ${classification.reasoning}`);
-
       // Step 2: Check for image attachments (override classification)
       const fileParts = message.parts.filter(
         (part: any) =>
@@ -122,9 +117,12 @@ export class DocumentRetrievalService {
               '[RAG] 💾 Prepared cached system message for full document',
             );
 
-            // For full document, we'll use the document directly
-            // instead of the normal context formatting
-            documentContext = `[FULL_DOCUMENT_LOADED: ${broadResult.fullDocument.metadata.filename}]`;
+            // Still format context normally to include images
+            // The full document text will be in the cached message
+            // But images need to be in the regular context
+            console.log(
+              '[RAG] Formatting context to include images from full document results',
+            );
           }
         }
       }
@@ -137,19 +135,26 @@ export class DocumentRetrievalService {
         this.logSearchResults(similarDocs);
 
         // Generate citations from search results
+        // - For specific queries: no score filtering (already filtered by hybrid search)
+        // - For broad queries with full document: include all chunks for comprehensive summary
+        // - For other cases: use default minScore threshold
         citations = generateCitations(similarDocs, {
           maxCitations:
             queryType === 'specific' ? 12 : this.options.maxCitations,
-          minScore: this.options.minScore,
+          minScore: fullDocumentLoaded || queryType === 'specific' ? 0.0 : this.options.minScore,
           groupBySource: false,
         });
 
         console.log(`[Citations] Generated ${citations.length} citations`);
 
-        // Create context from retrieved documents (if not using full document)
-        if (!fullDocumentLoaded) {
-          documentContext = formatDocumentContext(similarDocs);
-        }
+        // Create context from retrieved documents
+        // - For specific queries: no score filtering (already filtered by hybrid search)
+        // - For full document loading: include all chunks for comprehensive analysis
+        // - For other cases: use default filtering (images >0.02, text >0.3)
+        documentContext = formatDocumentContext(
+          similarDocs,
+          fullDocumentLoaded || queryType === 'specific' ? 0.0 : undefined,
+        );
 
         this.logContextDebugInfo(documentContext, similarDocs);
 
@@ -313,42 +318,56 @@ export class DocumentRetrievalService {
       '[RAG] Using BROAD query path (comprehensive analysis)',
     );
 
-    // Step 1: Get all relevant parent chunks from vector search
-    const allResults = await this.vectorStore.searchSimilar(
+    // Step 1: Get initial results to identify the target document
+    const initialResults = await this.vectorStore.searchSimilar(
       query,
-      this.options.maxResults,
+      50, // Just need enough to identify the document
       undefined,
       true, // Use reranking
     );
 
     // Filter to parent chunks only (or legacy chunks without chunkType)
-    const parentResults = allResults.filter(
+    const parentResults = initialResults.filter(
       (r) =>
         r.metadata.chunkType === 'parent' || !r.metadata.chunkType,
-    );
-
-    console.log(
-      `[RAG] Retrieved ${parentResults.length} parent chunks`,
     );
 
     if (parentResults.length === 0) {
       return { results: [] };
     }
 
-    // Step 2: Analyze document size
-    const docInfo = DocumentLoader.analyzeDocument(parentResults);
+    // Identify the primary document (most represented in top results)
+    const targetFilename = parentResults[0].metadata.filename;
+    console.log(`[RAG] Target document: "${targetFilename}"`);
+
+    // Step 2: Get ALL chunks from this document (not just top matches)
+    console.log('[RAG] Fetching ALL chunks from document for full context...');
+    const allDocChunks = await this.vectorStore.getAllChunksByFilename(
+      targetFilename,
+    );
+
+    console.log(
+      `[RAG] Retrieved ${allDocChunks.length} total chunks from document`,
+    );
+
+    if (allDocChunks.length === 0) {
+      return { results: parentResults };
+    }
+
+    // Step 3: Analyze document size
+    const docInfo = DocumentLoader.analyzeDocument(allDocChunks);
 
     console.log(
       `[RAG] Document "${docInfo.filename}": ${docInfo.totalTokens.toLocaleString()} tokens`,
     );
 
-    // Step 3: Decide whether to load full document
+    // Step 4: Decide whether to load full document
     if (docInfo.canLoadFully) {
       console.log(
         `[RAG] ✅ Loading full document (under 200K token limit)`,
       );
 
-      const fullDoc = DocumentLoader.loadFullDocument(parentResults);
+      const fullDoc = DocumentLoader.loadFullDocument(allDocChunks);
 
       if (fullDoc) {
         console.log(
@@ -359,7 +378,7 @@ export class DocumentRetrievalService {
         PromptCacheManager.logCacheInfo(fullDoc.metadata.totalTokens);
 
         return {
-          results: parentResults,
+          results: allDocChunks, // Return ALL chunks, not just top matches
           fullDocument: fullDoc,
         };
       }

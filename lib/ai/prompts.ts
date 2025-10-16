@@ -2,8 +2,12 @@ import type { ArtifactKind } from '@/components/artifact';
 import type { Geo } from '@vercel/functions';
 import type { SearchResult } from '../types';
 
-export const formatDocumentContext = (similarDocs: SearchResult[]) => {
+export const formatDocumentContext = (similarDocs: SearchResult[], minScoreOverride?: number) => {
   let imageCounter = 1;
+
+  // Use provided minScore or defaults (0.02 for images, 0.3 for text)
+  const minImageScore = minScoreOverride !== undefined ? minScoreOverride : 0.02;
+  const minTextScore = minScoreOverride !== undefined ? minScoreOverride : 0.3;
 
   const filteredDocs = similarDocs.filter((doc) => {
     // Filter out logos, watermarks, and decorative images
@@ -28,24 +32,33 @@ export const formatDocumentContext = (similarDocs: SearchResult[]) => {
 
       if (isLogo) return false;
 
-      return doc.score > 0.02;
+      return doc.score > minImageScore;
     }
-    return doc.score > 0.3;
+    return doc.score > minTextScore;
   });
 
-  // Helper to parse relatedImageUrls
+  // Helper to parse and validate relatedImageUrls
   const getRelatedImageUrls = (
     metadata: SearchResult['metadata'],
   ): string[] => {
     if (!metadata.relatedImageUrls) return [];
+    let urls: string[] = [];
+
     if (typeof metadata.relatedImageUrls === 'string') {
       try {
-        return JSON.parse(metadata.relatedImageUrls);
+        urls = JSON.parse(metadata.relatedImageUrls);
       } catch {
         return [];
       }
+    } else {
+      urls = metadata.relatedImageUrls;
     }
-    return metadata.relatedImageUrls;
+
+    // Filter to only valid URLs (must be absolute URLs with http:// or https://)
+    return urls.filter(url => {
+      if (!url || typeof url !== 'string') return false;
+      return url.startsWith('http://') || url.startsWith('https://');
+    });
   };
 
   // Check if we have any images to provide explicit guidance to the AI
