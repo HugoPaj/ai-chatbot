@@ -8,6 +8,7 @@ import {
   getOrgByDomain,
   createSSOUser,
 } from '@/lib/db/queries';
+import { normalizeEmail } from '@/lib/db/utils';
 import { authConfig } from './auth.config';
 import { DUMMY_PASSWORD } from '@/lib/constants';
 import { isAdminEmail } from '@/lib/auth/admin';
@@ -80,7 +81,7 @@ export const {
       credentials: {},
       async authorize({ email, password }: any) {
         const normalizedEmail =
-          typeof email === 'string' ? email.trim().toLowerCase() : '';
+          typeof email === 'string' ? normalizeEmail(email) : '';
         const users = await getUser(normalizedEmail);
 
         if (users.length === 0) {
@@ -135,7 +136,7 @@ export const {
           (profile as any)?.displayName ||
           email.split('@')[0]; // Fallback to email prefix
 
-        const normalizedEmail = email.trim().toLowerCase();
+        const normalizedEmail = normalizeEmail(email);
         const existingUsers = await getUser(normalizedEmail);
 
         if (existingUsers.length === 0) {

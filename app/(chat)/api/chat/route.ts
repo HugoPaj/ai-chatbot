@@ -7,18 +7,12 @@ import {
   convertToModelMessages,
   type UIMessage,
 } from 'ai';
-import type { SearchResult } from '@/lib/types';
 import { auth } from '@/app/(auth)/auth';
 import {
   type RequestHints,
   systemPrompt,
-  formatDocumentContext,
 } from '@/lib/ai/prompts';
-import {
-  generateCitations,
-  enhancePromptWithCitations,
-} from '@/lib/ai/citation-generator';
-import { VectorStore } from '@/lib/ai/vectorStore';
+import { DocumentRetrievalService } from '@/lib/ai/document-retrieval-service';
 import {
   deleteChatById,
   getChatById,
@@ -174,214 +168,25 @@ export async function POST(request: Request) {
         let documentContext = '';
         let documentSources: string[] = [];
 
-        // Extract user message text for async processing
-        const userMessageText =
-          message.parts.find((part) => part.type === 'text')?.text || '';
+        // Get document context using the document retrieval service
+        const documentRetrievalService = new DocumentRetrievalService();
+        await documentRetrievalService.initialize();
 
-        // Get document context before starting stream for better results
-        try {
-          const vectorStore = new VectorStore();
-          await vectorStore.initialize();
+        const ragResult = await documentRetrievalService.getDocumentContext(message);
+        documentContext = ragResult.documentContext;
+        documentSources = ragResult.documentSources;
+        citations = ragResult.citations;
 
-          console.log(
-            '[VectorStore] Searching for documents similar to user query…',
-          );
-
-          // Attempt an image-based similarity search first if the user provided image attachments
-          let similarDocs: SearchResult[] = [];
-
-          // Check for file parts with images
-          const fileParts = message.parts.filter(
-            (part: any) =>
-              part.type === 'file' && part.mediaType?.startsWith('image/'),
-          );
-
-          if (fileParts.length > 0) {
-            const firstImage = fileParts[0] as any;
-
-            try {
-              console.log(
-                `[VectorStore] Detected image attachment (${firstImage.name}). Performing image similarity search…`,
-              );
-
-              const imageResponse = await fetch(firstImage.url);
-
-              if (!imageResponse.ok) {
-                throw new Error(
-                  `Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`,
-                );
-              }
-
-              const imageBuffer = Buffer.from(
-                await imageResponse.arrayBuffer(),
-              );
-              const imageBase64 = imageBuffer.toString('base64');
-
-              similarDocs = await vectorStore.searchSimilarByImage(
-                imageBase64,
-                100,
-              );
-
-              console.log(
-                `[VectorStore] Retrieved ${similarDocs.length} document(s) from image search`,
-              );
-            } catch (error) {
-              console.error(
-                '[VectorStore] Image similarity search failed, falling back to text search:',
-                error,
-              );
-            }
-          }
-
-          // Fall back to text search if no results were returned from the image search
-          if (similarDocs.length === 0) {
-            // Check if user is asking specifically about images/figures/photos
-            const isImageQuery =
-              /\b(imagen|foto|figura|diagrama|gráfico|chart|image|picture|photo|figure|diagram|visual|fotos|imágenes|figuras|diagramas|gráficos|mostrar|enseñar|ver)/i.test(
-                userMessageText,
-              );
-
-            if (isImageQuery) {
-              console.log(
-                '[VectorStore] Detected image query - searching with boosted image results',
-              );
-              // Search with higher limit and boost image results
-              const allResults = await vectorStore.searchSimilar(
-                userMessageText,
-                100,
-              );
-              // Boost image results by adding a score bonus and prioritize them
-              similarDocs = allResults
-                .map((doc) => ({
-                  ...doc,
-                  score:
-                    doc.metadata.contentType === 'image'
-                      ? doc.score + 0.15
-                      : doc.score,
-                }))
-                .sort((a, b) => b.score - a.score);
-            } else {
-              similarDocs = await vectorStore.searchSimilar(
-                userMessageText,
-                100,
-              );
-            }
-          }
-
-          console.log(
-            `[VectorStore] Retrieved ${similarDocs.length} candidate document(s)`,
-          );
-
-          if (similarDocs.length > 0) {
-            // Optional: log top results with score and filename for visibility
-            console.log(
-              '[VectorStore] Top matches:',
-              similarDocs.slice(0, 5).map((doc) => ({
-                score: doc.score.toFixed(3),
-                file: doc.metadata.filename,
-                page: doc.metadata.page ?? 'N/A',
-                type: doc.metadata.contentType,
-              })),
-            );
-
-            // Debug: Check for images in results
-            const imageResults = similarDocs.filter(
-              (doc) => doc.metadata.contentType === 'image',
-            );
-            const textResults = similarDocs.filter(
-              (doc) => doc.metadata.contentType === 'text',
-            );
-            console.log(
-              `[VectorStore] Content breakdown: ${textResults.length} text, ${imageResults.length} images`,
-            );
-
-            if (imageResults.length > 0) {
-              console.log(
-                '[VectorStore] Image results:',
-                imageResults.slice(0, 3).map((doc) => ({
-                  score: doc.score.toFixed(3),
-                  file: doc.metadata.filename,
-                  page: doc.metadata.page ?? 'N/A',
-                  hasRelatedImages: !!(
-                    doc.metadata.relatedImageUrls &&
-                    (typeof doc.metadata.relatedImageUrls === 'string'
-                      ? JSON.parse(doc.metadata.relatedImageUrls).length > 0
-                      : doc.metadata.relatedImageUrls.length > 0)
-                  ),
-                })),
-              );
-            }
-
-            // Generate citations from search results
-            citations = generateCitations(similarDocs, {
-              maxCitations: 30,
-              minScore: 0.3,
-              groupBySource: false, // Use individual citations for precise referencing
-            });
-
-            console.log(`[Citations] Generated ${citations.length} citations`);
-
-            // Create context from retrieved documents
-            documentContext = formatDocumentContext(similarDocs);
-
-            // Debug: Log if images are included in context
-            if (documentContext.includes('![')) {
-              console.log('[VectorStore] ✅ Images included in context');
-              console.log(
-                '[VectorStore] Context preview:',
-                `${documentContext.substring(0, 500)}...`,
-              );
-            } else {
-              console.log('[VectorStore] ❌ No images in final context');
-              console.log(
-                '[VectorStore] Available image results:',
-                imageResults.length,
-              );
-              if (imageResults.length > 0) {
-                console.log(
-                  '[VectorStore] Image results details:',
-                  imageResults.map((doc) => ({
-                    score: doc.score,
-                    hasRelatedImages: !!doc.metadata.relatedImageUrls,
-                    content: doc.metadata.content?.substring(0, 100),
-                  })),
-                );
-              }
-            }
-
-            // Extract unique source filenames
-            documentSources = Array.from(
-              new Set(
-                similarDocs
-                  .filter((doc) => doc.score > 0.3)
-                  .map((doc) => doc.metadata.filename),
-              ),
-            );
-          } else {
-            console.log('[VectorStore] No relevant documents found for query.');
-          }
-        } catch (error) {
-          console.error('Error retrieving similar documents:', error);
-          // Continue without document context if there's an error
-        }
-
-        // Build enhanced system prompt with retrieved documents if available
-        let enhancedSystemPrompt = systemPrompt({
+        // Build enhanced system prompt with retrieved documents
+        const basePrompt = systemPrompt({
           selectedChatModel,
           requestHints,
         });
 
-        if (documentContext) {
-          enhancedSystemPrompt += `\n\nRelevant engineering documents for reference:\n${documentContext}`;
-        }
-
-        // Enhance prompt with citation instructions if we have citations
-        if (citations.length > 0) {
-          enhancedSystemPrompt = enhancePromptWithCitations(
-            enhancedSystemPrompt,
-            citations,
-          );
-        }
+        const enhancedSystemPrompt = documentRetrievalService.enhanceSystemPrompt(
+          basePrompt,
+          ragResult,
+        );
 
         // Decide whether to use a vision-capable model based on file parts
         const hasImageAttachment = Boolean(

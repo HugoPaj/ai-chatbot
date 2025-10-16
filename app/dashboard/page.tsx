@@ -8,7 +8,7 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle
+  CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,7 +22,7 @@ import {
   Clock,
   ChevronRight,
   Calendar,
-  Activity
+  Activity,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -30,8 +30,9 @@ import {
   getAdminCount,
   getDailyRequestCount,
   getUserStatistics,
-  getUserDailyUsageHistory
+  getUserDailyUsageHistory,
 } from '@/lib/db/queries';
+import { formatDate } from '@/lib/utils';
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -47,7 +48,7 @@ export default async function DashboardPage() {
     const [userCount, adminCount, dailyRequests] = await Promise.all([
       getUserCount(),
       getAdminCount(),
-      getDailyRequestCount()
+      getDailyRequestCount(),
     ]);
     return (
       <div className="container max-w-7xl mx-auto p-6">
@@ -129,21 +130,11 @@ export default async function DashboardPage() {
 
   const [userStats, usageHistory] = await Promise.all([
     getUserStatistics(userId || ''),
-    getUserDailyUsageHistory(userId || '', 7)
+    getUserDailyUsageHistory(userId || '', 7),
   ]);
 
-  // Format the date for display
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric'
-    }).format(date);
-  };
-
   // Get max value for chart scaling
-  const maxUsage = Math.max(...usageHistory.map(d => d.count), 1);
+  const maxUsage = Math.max(...usageHistory.map((d) => d.count), 1);
 
   return (
     <div className="min-h-screen">
@@ -169,7 +160,7 @@ export default async function DashboardPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Today's Requests
+                Today&apos;s Requests
               </CardTitle>
               <Zap className="size-4 text-muted-foreground" />
             </CardHeader>
@@ -190,17 +181,13 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{userStats.weeklyUsage}</div>
-              <p className="text-xs text-muted-foreground">
-                Last 7 days
-              </p>
+              <p className="text-xs text-muted-foreground">Last 7 days</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total Chats
-              </CardTitle>
+              <CardTitle className="text-sm font-medium">Total Chats</CardTitle>
               <MessageSquare className="size-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -219,7 +206,9 @@ export default async function DashboardPage() {
               <TrendingUp className="size-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{userStats.totalMessages}</div>
+              <div className="text-2xl font-bold">
+                {userStats.totalMessages}
+              </div>
               <p className="text-xs text-muted-foreground">
                 Total interactions
               </p>
@@ -240,22 +229,29 @@ export default async function DashboardPage() {
               <div className="h-[200px] w-full">
                 <div className="flex items-end justify-between h-full gap-2">
                   {usageHistory.map((day, index) => (
-                    <div key={day.date} className="flex-1 flex flex-col items-center gap-2">
-                      <div className="w-full bg-muted rounded-t flex items-end justify-center"
-                           style={{ height: '160px' }}>
+                    <div
+                      key={day.date}
+                      className="flex-1 flex flex-col items-center gap-2"
+                    >
+                      <div
+                        className="w-full bg-muted rounded-t flex items-end justify-center"
+                        style={{ height: '160px' }}
+                      >
                         <div
                           className="w-full bg-primary rounded-t transition-all duration-300 hover:opacity-80"
                           style={{
                             height: `${maxUsage > 0 ? (day.count / maxUsage) * 100 : 0}%`,
-                            minHeight: day.count > 0 ? '4px' : '0'
+                            minHeight: day.count > 0 ? '4px' : '0',
                           }}
                         />
                       </div>
                       <div className="text-center">
                         <p className="text-xs text-muted-foreground">
-                          {index === 0 ? formatDate(day.date).split(',')[0] :
-                           index === usageHistory.length - 1 ? 'Today' :
-                           formatDate(day.date).split(',')[0]}
+                          {index === 0
+                            ? formatDate(day.date).split(',')[0]
+                            : index === usageHistory.length - 1
+                              ? 'Today'
+                              : formatDate(day.date).split(',')[0]}
                         </p>
                         <p className="text-xs font-medium">{day.count}</p>
                       </div>
@@ -270,9 +266,7 @@ export default async function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>
-                Common tasks and features
-              </CardDescription>
+              <CardDescription>Common tasks and features</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               <Link href="/" className="block">
@@ -281,7 +275,9 @@ export default async function DashboardPage() {
                     <MessageSquare className="size-4 text-muted-foreground" />
                     <div>
                       <p className="text-sm font-medium">Start New Chat</p>
-                      <p className="text-xs text-muted-foreground">Create a new conversation</p>
+                      <p className="text-xs text-muted-foreground">
+                        Create a new conversation
+                      </p>
                     </div>
                   </div>
                   <ChevronRight className="size-4 text-muted-foreground" />
@@ -294,7 +290,9 @@ export default async function DashboardPage() {
                     <Clock className="size-4 text-muted-foreground" />
                     <div>
                       <p className="text-sm font-medium">Chat History</p>
-                      <p className="text-xs text-muted-foreground">View previous conversations</p>
+                      <p className="text-xs text-muted-foreground">
+                        View previous conversations
+                      </p>
                     </div>
                   </div>
                   <ChevronRight className="size-4 text-muted-foreground" />
@@ -320,9 +318,7 @@ export default async function DashboardPage() {
           <Card className="mt-6">
             <CardHeader>
               <CardTitle>Recent Conversations</CardTitle>
-              <CardDescription>
-                Your latest chat sessions
-              </CardDescription>
+              <CardDescription>Your latest chat sessions</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -332,14 +328,19 @@ export default async function DashboardPage() {
                       <div className="flex items-center gap-3">
                         <MessageSquare className="size-4 text-muted-foreground" />
                         <div>
-                          <p className="text-sm font-medium line-clamp-1">{chat.title}</p>
+                          <p className="text-sm font-medium line-clamp-1">
+                            {chat.title}
+                          </p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(chat.createdAt).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
+                            {new Date(chat.createdAt).toLocaleDateString(
+                              'en-US',
+                              {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              },
+                            )}
                           </p>
                         </div>
                       </div>
@@ -369,18 +370,26 @@ export default async function DashboardPage() {
           <CardContent>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Account Type</span>
+                <span className="text-sm text-muted-foreground">
+                  Account Type
+                </span>
                 <div className="flex items-center gap-2">
                   <Shield className="size-4 text-muted-foreground" />
                   <span className="text-sm font-medium">Organization User</span>
                 </div>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Organization</span>
-                <span className="text-sm font-medium">{userEmail.split('@')[1] || 'N/A'}</span>
+                <span className="text-sm text-muted-foreground">
+                  Organization
+                </span>
+                <span className="text-sm font-medium">
+                  {userEmail.split('@')[1] || 'N/A'}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Access Level</span>
+                <span className="text-sm text-muted-foreground">
+                  Access Level
+                </span>
                 <span className="text-sm font-medium">Unlimited</span>
               </div>
             </div>
