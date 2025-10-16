@@ -1,6 +1,7 @@
 export type DataPart = { type: 'append-message'; message: string };
 
 export type ContentType = 'text' | 'image' | 'table';
+export type ChunkType = 'child' | 'parent';
 
 export interface Coordinates {
   x: number;
@@ -32,6 +33,10 @@ export interface DocumentChunk {
     tableStructure?: TableStructure;
     originalImagePath?: string; // For image files uploaded directly
     pdfUrl?: string; // R2 URL for the source PDF document
+    // Parent-child chunking for dual-path RAG
+    chunkType?: ChunkType; // 'child' for precise retrieval, 'parent' for context
+    parentChunkId?: string; // For child chunks, reference to parent
+    childChunkIds?: string[]; // For parent chunks, references to children
   };
 }
 

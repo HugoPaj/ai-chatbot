@@ -5,6 +5,11 @@ import {
   enhancePromptWithCitations,
 } from './citation-generator';
 import { formatDocumentContext } from './prompts';
+import { classifyQuery, type QueryType } from './query-classifier';
+import { BM25Service, type BM25Document } from './bm25-service';
+import { HybridSearch } from './hybrid-search';
+import { DocumentLoader, type FullDocumentContent } from './document-loader';
+import { PromptCacheManager } from './prompt-cache-manager';
 
 export interface RagOptions {
   maxResults?: number;
@@ -16,6 +21,9 @@ export interface RagResult {
   documentContext: string;
   citations: any[];
   documentSources: string[];
+  queryType?: QueryType;
+  fullDocumentLoaded?: boolean;
+  cachedSystemMessage?: any; // Anthropic MessageCreateParamsNonStreaming['system']
 }
 
 export interface MessagePart {
@@ -50,23 +58,79 @@ export class DocumentRetrievalService {
   }
 
   /**
-   * Get document context for a user message using RAG
+   * Get document context for a user message using DUAL-PATH RAG
+   * Routes to specific or broad query path based on query classification
    */
   async getDocumentContext(message: Message): Promise<RagResult> {
     const userMessageText = this.extractTextFromMessage(message);
     let documentContext = '';
     let citations: any[] = [];
     let documentSources: string[] = [];
+    let queryType: QueryType = 'specific';
+    let fullDocumentLoaded = false;
+    let cachedSystemMessage: any = undefined;
 
     try {
+      console.log('[RAG] ========== DUAL-PATH RAG ==========');
+      console.log(`[RAG] Query: "${userMessageText.substring(0, 100)}..."`);
+
+      // Step 1: Classify query type
+      const classification = await classifyQuery(userMessageText);
+      queryType = classification.type;
+
       console.log(
-        '[VectorStore] Searching for documents similar to user query…',
+        `[RAG] Query classified as: ${queryType.toUpperCase()} (confidence: ${classification.confidence})`,
+      );
+      console.log(`[RAG] Reasoning: ${classification.reasoning}`);
+
+      // Step 2: Check for image attachments (override classification)
+      const fileParts = message.parts.filter(
+        (part: any) =>
+          part.type === 'file' && part.mediaType?.startsWith('image/'),
       );
 
-      const similarDocs = await this.searchDocuments(message, userMessageText);
+      let similarDocs: SearchResult[] = [];
+
+      if (fileParts.length > 0) {
+        console.log('[RAG] Image attachment detected, using image search');
+        similarDocs = await this.searchByImage(fileParts[0]);
+      } else {
+        // Step 3: Route based on query type
+        if (queryType === 'specific') {
+          // SPECIFIC PATH: Child chunks + hybrid search + parent context
+          similarDocs = await this.getDocumentContextSpecific(
+            userMessageText,
+          );
+        } else {
+          // BROAD PATH: Document size check + full load with caching
+          const broadResult = await this.getDocumentContextBroad(
+            userMessageText,
+          );
+
+          similarDocs = broadResult.results;
+
+          // If full document loaded, prepare cached system message
+          if (broadResult.fullDocument) {
+            fullDocumentLoaded = true;
+
+            cachedSystemMessage = PromptCacheManager.createCachedSystemMessage(
+              '', // Base prompt will be added later
+              broadResult.fullDocument,
+            );
+
+            console.log(
+              '[RAG] 💾 Prepared cached system message for full document',
+            );
+
+            // For full document, we'll use the document directly
+            // instead of the normal context formatting
+            documentContext = `[FULL_DOCUMENT_LOADED: ${broadResult.fullDocument.metadata.filename}]`;
+          }
+        }
+      }
 
       console.log(
-        `[VectorStore] Retrieved ${similarDocs.length} candidate document(s)`,
+        `[RAG] Retrieved ${similarDocs.length} document(s) after ${queryType} path`,
       );
 
       if (similarDocs.length > 0) {
@@ -74,15 +138,18 @@ export class DocumentRetrievalService {
 
         // Generate citations from search results
         citations = generateCitations(similarDocs, {
-          maxCitations: this.options.maxCitations,
+          maxCitations:
+            queryType === 'specific' ? 12 : this.options.maxCitations,
           minScore: this.options.minScore,
           groupBySource: false,
         });
 
         console.log(`[Citations] Generated ${citations.length} citations`);
 
-        // Create context from retrieved documents
-        documentContext = formatDocumentContext(similarDocs);
+        // Create context from retrieved documents (if not using full document)
+        if (!fullDocumentLoaded) {
+          documentContext = formatDocumentContext(similarDocs);
+        }
 
         this.logContextDebugInfo(documentContext, similarDocs);
 
@@ -95,10 +162,12 @@ export class DocumentRetrievalService {
           ),
         );
       } else {
-        console.log('[VectorStore] No relevant documents found for query.');
+        console.log('[RAG] No relevant documents found for query.');
       }
+
+      console.log('[RAG] ====================================');
     } catch (error) {
-      console.error('Error retrieving similar documents:', error);
+      console.error('[RAG] Error retrieving documents:', error);
       // Return empty context if there's an error
     }
 
@@ -106,6 +175,9 @@ export class DocumentRetrievalService {
       documentContext,
       citations,
       documentSources,
+      queryType,
+      fullDocumentLoaded,
+      cachedSystemMessage,
     };
   }
 
@@ -130,6 +202,175 @@ export class DocumentRetrievalService {
     }
 
     return enhancedPrompt;
+  }
+
+  /**
+   * SPECIFIC QUERY PATH
+   * For precise facts, citations, definitions
+   * - Searches child chunks (150-250 tokens)
+   * - Uses hybrid search (BM25 + embeddings)
+   * - Retrieves 30-40 candidates
+   * - Reranks to top 8-12
+   * - Returns parent chunks for context
+   */
+  private async getDocumentContextSpecific(
+    query: string,
+  ): Promise<SearchResult[]> {
+    console.log('[RAG] Using SPECIFIC query path (precise retrieval)');
+
+    // Step 1: Search child chunks only
+    const childChunks = await this.vectorStore.searchSimilar(
+      query,
+      40, // Retrieve 40 candidates
+      undefined,
+      false, // Don't use reranking yet, we'll do hybrid search first
+    );
+
+    // Filter to child chunks only (with fallback to legacy chunks if no child chunks exist)
+    let childResults = childChunks.filter(
+      (r) => r.metadata.chunkType === 'child',
+    );
+
+    // Fallback: if no child chunks found, use legacy chunks (documents uploaded before parent-child system)
+    if (childResults.length === 0) {
+      console.log(
+        '[RAG] No child chunks found, using legacy chunks as fallback',
+      );
+      childResults = childChunks.filter((r) => !r.metadata.chunkType);
+    }
+
+    console.log(
+      `[RAG] Retrieved ${childResults.length} ${childResults[0]?.metadata.chunkType === 'child' ? 'child' : 'legacy'} chunks for precise matching`,
+    );
+
+    // Step 2: Hybrid search with BM25
+    // Index child chunks for BM25
+    const bm25Docs: BM25Document[] = childResults.map((r) => ({
+      id: r.metadata.contentHash || r.metadata.filename,
+      content: r.metadata.content || '',
+      metadata: r.metadata,
+    }));
+
+    const bm25 = new BM25Service();
+    bm25.indexDocuments(bm25Docs);
+    const bm25Results = bm25.search(query, 40);
+
+    console.log(`[RAG] BM25 found ${bm25Results.length} keyword matches`);
+
+    // Step 3: Fuse BM25 + semantic results
+    const hybridResults = HybridSearch.fuseResults(
+      bm25Results,
+      childResults,
+      'rrf', // Reciprocal Rank Fusion
+    );
+
+    console.log(
+      `[RAG] Fused hybrid results: ${hybridResults.length} candidates`,
+    );
+
+    // Step 4: Rerank to top 8-12 chunks
+    const topResults = HybridSearch.toSearchResults(
+      hybridResults.slice(0, 12),
+    );
+
+    console.log(`[RAG] Reranked to top ${topResults.length} results`);
+
+    // Step 5: Get parent chunks for full context
+    const parentIds = [
+      ...new Set(
+        topResults
+          .map((r) => r.metadata.parentChunkId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+
+    const parentChunks = await this.vectorStore.getParentChunksByIds(
+      parentIds,
+    );
+
+    console.log(
+      `[RAG] Retrieved ${parentChunks.length} parent chunks for context`,
+    );
+
+    // Return parent chunks (full context) with scores from child chunks
+    return parentChunks.length > 0 ? parentChunks : topResults;
+  }
+
+  /**
+   * BROAD QUERY PATH
+   * For summaries, analysis, synthesis
+   * - Checks document size
+   * - If <200K tokens: loads entire document with prompt caching
+   * - If >200K tokens: uses adaptive chunking (fallback to standard retrieval)
+   */
+  private async getDocumentContextBroad(
+    query: string,
+  ): Promise<{
+    results: SearchResult[];
+    fullDocument?: FullDocumentContent;
+  }> {
+    console.log(
+      '[RAG] Using BROAD query path (comprehensive analysis)',
+    );
+
+    // Step 1: Get all relevant parent chunks from vector search
+    const allResults = await this.vectorStore.searchSimilar(
+      query,
+      this.options.maxResults,
+      undefined,
+      true, // Use reranking
+    );
+
+    // Filter to parent chunks only (or legacy chunks without chunkType)
+    const parentResults = allResults.filter(
+      (r) =>
+        r.metadata.chunkType === 'parent' || !r.metadata.chunkType,
+    );
+
+    console.log(
+      `[RAG] Retrieved ${parentResults.length} parent chunks`,
+    );
+
+    if (parentResults.length === 0) {
+      return { results: [] };
+    }
+
+    // Step 2: Analyze document size
+    const docInfo = DocumentLoader.analyzeDocument(parentResults);
+
+    console.log(
+      `[RAG] Document "${docInfo.filename}": ${docInfo.totalTokens.toLocaleString()} tokens`,
+    );
+
+    // Step 3: Decide whether to load full document
+    if (docInfo.canLoadFully) {
+      console.log(
+        `[RAG] ✅ Loading full document (under 200K token limit)`,
+      );
+
+      const fullDoc = DocumentLoader.loadFullDocument(parentResults);
+
+      if (fullDoc) {
+        console.log(
+          `[RAG] 📄 Full document loaded: ${fullDoc.metadata.totalTokens.toLocaleString()} tokens`,
+        );
+
+        // Log cache efficiency info
+        PromptCacheManager.logCacheInfo(fullDoc.metadata.totalTokens);
+
+        return {
+          results: parentResults,
+          fullDocument: fullDoc,
+        };
+      }
+    } else {
+      console.log(
+        `[RAG] ⚠️ Document exceeds 200K token limit, using standard retrieval`,
+      );
+    }
+
+    // Fallback: return parent chunks (standard retrieval)
+    return { results: parentResults };
   }
 
   /**

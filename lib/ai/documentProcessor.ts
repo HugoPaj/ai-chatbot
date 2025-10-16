@@ -87,7 +87,7 @@ const uploadImageToR2 = async (
   }
 };
 
-// Helper function to chunk text
+// Helper function to chunk text - OLD VERSION (kept for backward compatibility)
 const chunkText = (
   text: string,
   chunkSize: number,
@@ -136,6 +136,118 @@ const chunkText = (
 
   // Filter out very short chunks (less than 50 characters)
   return chunks.filter((chunk) => chunk.length >= 50);
+};
+
+// NEW: Parent-child chunking for dual-path RAG
+interface ChunkPair {
+  childChunk: string;
+  parentChunk: string;
+  childId: string;
+  parentId: string;
+}
+
+/**
+ * Creates parent-child chunk pairs for dual-path RAG
+ * - Child chunks (150-250 tokens ≈ 600-1000 chars) for precise retrieval
+ * - Parent chunks (500-750 tokens ≈ 2000-3000 chars) for context
+ */
+const createParentChildChunks = (
+  text: string,
+  baseId: string,
+): ChunkPair[] => {
+  const cleanText = text
+    .replace(/\s+/g, ' ')
+    .replace(/\n+/g, ' ')
+    .trim();
+
+  if (cleanText.length === 0) {
+    return [];
+  }
+
+  const pairs: ChunkPair[] = [];
+
+  // Configuration
+  const CHILD_SIZE = 800; // ~200 tokens (chars/4)
+  const CHILD_OVERLAP = 100;
+  const PARENT_SIZE = 2500; // ~625 tokens
+  const PARENT_OVERLAP = 250;
+
+  // Split by sentences for better boundaries
+  const sentences = cleanText.split(/(?<=[.!?])\s+/);
+
+  // Create parent chunks first
+  const parentChunks: string[] = [];
+  let currentParent = '';
+
+  for (const sentence of sentences) {
+    const trimmed = sentence.trim();
+    if (!trimmed) continue;
+
+    if (
+      currentParent.length + trimmed.length > PARENT_SIZE &&
+      currentParent.length > 0
+    ) {
+      parentChunks.push(currentParent.trim());
+
+      // Add overlap
+      const words = currentParent.split(' ');
+      const overlapWords = Math.floor(PARENT_OVERLAP / 6);
+      currentParent = `${words.slice(-overlapWords).join(' ')} ${trimmed}`;
+    } else {
+      currentParent += (currentParent ? ' ' : '') + trimmed;
+    }
+  }
+
+  if (currentParent.trim()) {
+    parentChunks.push(currentParent.trim());
+  }
+
+  // For each parent chunk, create child chunks
+  parentChunks.forEach((parentText, parentIndex) => {
+    const parentId = `${baseId}-parent-${parentIndex}`;
+    const parentSentences = parentText.split(/(?<=[.!?])\s+/);
+
+    const childChunks: string[] = [];
+    let currentChild = '';
+
+    for (const sentence of parentSentences) {
+      const trimmed = sentence.trim();
+      if (!trimmed) continue;
+
+      if (
+        currentChild.length + trimmed.length > CHILD_SIZE &&
+        currentChild.length > 0
+      ) {
+        childChunks.push(currentChild.trim());
+
+        // Add overlap
+        const words = currentChild.split(' ');
+        const overlapWords = Math.floor(CHILD_OVERLAP / 6);
+        currentChild = `${words.slice(-overlapWords).join(' ')} ${trimmed}`;
+      } else {
+        currentChild += (currentChild ? ' ' : '') + trimmed;
+      }
+    }
+
+    if (currentChild.trim()) {
+      childChunks.push(currentChild.trim());
+    }
+
+    // Create pairs
+    childChunks.forEach((childText, childIndex) => {
+      // Filter out very short chunks
+      if (childText.length >= 200) {
+        pairs.push({
+          childChunk: childText,
+          parentChunk: parentText,
+          childId: `${baseId}-child-${parentIndex}-${childIndex}`,
+          parentId,
+        });
+      }
+    });
+  });
+
+  return pairs;
 };
 
 // Helper function to check if Docling service is available
@@ -349,7 +461,77 @@ const processWithDocling = async (
     });
 
     console.log(`    [DocProcessor] ✅ Chunks enriched successfully`);
-    return enrichedChunks;
+
+    // NEW: Apply parent-child chunking to text chunks from Docling
+    console.log(`    [DocProcessor] 🔄 Applying parent-child chunking to text chunks...`);
+
+    const textChunksFromDocling = enrichedChunks.filter(c => c.metadata.contentType === 'text');
+    const nonTextChunks = enrichedChunks.filter(c => c.metadata.contentType !== 'text');
+
+    if (textChunksFromDocling.length === 0) {
+      console.log(`    [DocProcessor] ⚠️ No text chunks to process for parent-child`);
+      return enrichedChunks;
+    }
+
+    // Combine all text content and apply parent-child chunking
+    const allText = textChunksFromDocling.map(c => c.content).join('\n\n');
+    const baseId = contentHash || crypto.createHash('md5').update(filename).digest('hex').slice(0, 16);
+    const chunkPairs = createParentChildChunks(allText, baseId);
+
+    console.log(`    [DocProcessor] 📦 Created ${chunkPairs.length} parent-child chunk pairs from Docling text`);
+
+    // Create parent and child chunks with proper metadata
+    const parentChildChunks: DocumentChunk[] = [];
+    const addedParentIds = new Set<string>();
+
+    chunkPairs.forEach((pair) => {
+      // Add child chunk
+      parentChildChunks.push({
+        content: pair.childChunk,
+        metadata: {
+          source: filePath,
+          page: 1, // Docling already chunked by page, this is approximate
+          type: 'pdf',
+          filename,
+          contentHash: contentHash || '',
+          contentType: 'text',
+          pdfUrl,
+          chunkType: 'child',
+          parentChunkId: pair.parentId,
+        },
+      });
+
+      // Add parent chunk (only once)
+      if (!addedParentIds.has(pair.parentId)) {
+        addedParentIds.add(pair.parentId);
+
+        const childIds = chunkPairs
+          .filter(p => p.parentId === pair.parentId)
+          .map(p => p.childId);
+
+        parentChildChunks.push({
+          content: pair.parentChunk,
+          metadata: {
+            source: filePath,
+            page: 1,
+            type: 'pdf',
+            filename,
+            contentHash: contentHash || '',
+            contentType: 'text',
+            pdfUrl,
+            chunkType: 'parent',
+            childChunkIds: childIds,
+          },
+        });
+      }
+    });
+
+    console.log(
+      `    [DocProcessor] ✅ Created ${parentChildChunks.filter(c => c.metadata.chunkType === 'child').length} child and ${parentChildChunks.filter(c => c.metadata.chunkType === 'parent').length} parent chunks`,
+    );
+
+    // Return parent-child chunks + original non-text chunks (images, tables)
+    return [...parentChildChunks, ...nonTextChunks];
   } catch (error) {
     console.error(`    ❌ Docling processing failed:`, error);
     throw error;
@@ -427,33 +609,42 @@ export const DocumentProcessor = {
           return [];
         }
 
-        const chunks = chunkText(data.text, 1000, 200);
         const filename = cleanFilename(filePath, 'unknown.pdf');
+        const baseId = contentHash || crypto.createHash('md5').update(filePath).digest('hex').slice(0, 16);
+
+        // Use new parent-child chunking
+        const chunkPairs = createParentChildChunks(data.text, baseId);
+
+        console.log(
+          `    📦 Created ${chunkPairs.length} parent-child chunk pairs`,
+        );
 
         // Improved page number estimation
-        // Estimate average characters per page based on total pages and text length
         const avgCharsPerPage = Math.max(
           1000,
           data.text.length / data.numpages,
         );
 
-        return chunks.map((chunk: string, index: number): DocumentChunk => {
-          // Calculate cumulative character position for this chunk
-          const cumulativeChars = chunks
-            .slice(0, index)
-            .reduce((sum, c) => sum + c.length, 0);
+        // Create both child and parent chunks
+        const allChunks: DocumentChunk[] = [];
 
-          // Estimate page number based on character position
+        // Track which parent IDs we've already added
+        const addedParentIds = new Set<string>();
+
+        chunkPairs.forEach((pair, pairIndex) => {
+          // Calculate page for this chunk pair based on text position
+          const textPosition = data.text.indexOf(pair.childChunk.substring(0, 50));
           const estimatedPage = Math.min(
             data.numpages,
             Math.max(
               1,
-              Math.ceil((cumulativeChars + chunk.length / 2) / avgCharsPerPage),
+              Math.ceil(textPosition / avgCharsPerPage),
             ),
           );
 
-          return {
-            content: chunk,
+          // Add child chunk (for precise retrieval)
+          allChunks.push({
+            content: pair.childChunk,
             metadata: {
               source: filePath,
               page: estimatedPage,
@@ -461,10 +652,43 @@ export const DocumentProcessor = {
               filename,
               contentHash: contentHash || '',
               contentType: 'text',
-              pdfUrl, // Add PDF URL to fallback processing
+              pdfUrl,
+              chunkType: 'child',
+              parentChunkId: pair.parentId,
             },
-          };
+          });
+
+          // Add parent chunk only once (multiple children may share same parent)
+          if (!addedParentIds.has(pair.parentId)) {
+            addedParentIds.add(pair.parentId);
+
+            // Collect all child IDs for this parent
+            const childIds = chunkPairs
+              .filter((p) => p.parentId === pair.parentId)
+              .map((p) => p.childId);
+
+            allChunks.push({
+              content: pair.parentChunk,
+              metadata: {
+                source: filePath,
+                page: estimatedPage,
+                type: 'pdf',
+                filename,
+                contentHash: contentHash || '',
+                contentType: 'text',
+                pdfUrl,
+                chunkType: 'parent',
+                childChunkIds: childIds,
+              },
+            });
+          }
         });
+
+        console.log(
+          `    ✅ Total chunks: ${allChunks.length} (${allChunks.filter((c) => c.metadata.chunkType === 'child').length} children, ${allChunks.filter((c) => c.metadata.chunkType === 'parent').length} parents)`,
+        );
+
+        return allChunks;
       } catch (pdfError) {
         console.error(`    ❌ PDF parsing failed:`, pdfError);
         throw new Error(

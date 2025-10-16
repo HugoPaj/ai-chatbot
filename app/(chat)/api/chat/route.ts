@@ -177,13 +177,17 @@ export async function POST(request: Request) {
         documentSources = ragResult.documentSources;
         citations = ragResult.citations;
 
+        console.log(`[RAG] Query type: ${ragResult.queryType}`);
+        console.log(`[RAG] Full document loaded: ${ragResult.fullDocumentLoaded}`);
+
         // Build enhanced system prompt with retrieved documents
         const basePrompt = systemPrompt({
           selectedChatModel,
           requestHints,
         });
 
-        const enhancedSystemPrompt = documentRetrievalService.enhanceSystemPrompt(
+        // Build system prompt with document context
+        const systemPromptWithContext = documentRetrievalService.enhanceSystemPrompt(
           basePrompt,
           ragResult,
         );
@@ -201,7 +205,44 @@ export async function POST(request: Request) {
           : selectedChatModel;
 
         // Convert UIMessages to ModelMessages for AI SDK v5 compatibility
-        const modelMessages = convertToModelMessages(messages);
+        let modelMessages = convertToModelMessages(messages);
+
+        // For full document loading with caching, inject the document as a cached user message
+        if (ragResult.fullDocumentLoaded && ragResult.cachedSystemMessage) {
+          console.log('[RAG] Injecting cached document into message history');
+
+          // Extract the document content from cached system message
+          const docContent = Array.isArray(ragResult.cachedSystemMessage)
+            ? ragResult.cachedSystemMessage
+                .map((part: any) => (part.type === 'text' ? part.text : ''))
+                .filter(Boolean)
+                .join('\n\n')
+            : '';
+
+          // Inject a user message with the full document BEFORE the actual messages
+          // This gets cached by Anthropic
+          modelMessages = [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `Here is the full document for context:\n\n${docContent}`,
+                  providerOptions: {
+                    anthropic: { cacheControl: { type: 'ephemeral' } },
+                  },
+                },
+              ],
+            },
+            {
+              role: 'assistant',
+              content: 'I have read and understood the full document. I am ready to answer questions about it.',
+            },
+            ...modelMessages,
+          ];
+
+          console.log('[RAG] ✅ Document injected with cache control enabled');
+        }
 
         // Send sources data if available
         if (documentSources.length > 0) {
@@ -217,7 +258,7 @@ export async function POST(request: Request) {
 
         const result = streamText({
           model: myProvider.languageModel(resolvedModelId),
-          system: enhancedSystemPrompt,
+          system: systemPromptWithContext,
           messages: modelMessages,
           stopWhen: stepCountIs(5),
 
@@ -259,7 +300,22 @@ export async function POST(request: Request) {
             },
           }),
 
-          onFinish: async () => {
+          onFinish: async (result) => {
+            // Log cache metrics from Anthropic
+            if (result.providerMetadata?.anthropic) {
+              const cacheMetrics = result.providerMetadata.anthropic;
+              console.log('[Cache Metrics]', JSON.stringify(cacheMetrics, null, 2));
+
+              if (cacheMetrics.cacheCreationInputTokens) {
+                console.log(`[Cache] ✍️  Cache WRITE: ${cacheMetrics.cacheCreationInputTokens} tokens cached`);
+              }
+              if (cacheMetrics.cacheReadInputTokens) {
+                console.log(`[Cache] ✅ Cache READ: ${cacheMetrics.cacheReadInputTokens} tokens read from cache`);
+                const savings = ((cacheMetrics.cacheReadInputTokens * 0.9) / cacheMetrics.cacheReadInputTokens * 100).toFixed(1);
+                console.log(`[Cache] 💰 Cost savings: ~${savings}% on cached tokens`);
+              }
+            }
+
             // Send citations data after the response is complete
             if (citations.length > 0) {
               console.log(

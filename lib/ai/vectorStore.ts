@@ -96,6 +96,7 @@ export class VectorStore {
   /**
    * Generate a consistent document ID based on content and metadata
    * This ensures the same document gets the same ID across runs
+   * Now includes chunkType for parent-child chunking
    */
   private generateDocumentId(doc: DocumentChunk): string {
     const base = doc.metadata.contentHash ?? doc.metadata.source;
@@ -111,7 +112,8 @@ export class VectorStore {
       )
       .digest('hex')
       .slice(0, 8); // short & stable
-    const idSource = `${base}|${doc.metadata.page || ''}|${doc.metadata.section || ''}|${chunkHash}`;
+    const chunkType = doc.metadata.chunkType || 'legacy';
+    const idSource = `${base}|${doc.metadata.page || ''}|${doc.metadata.section || ''}|${chunkType}|${chunkHash}`;
     return crypto.createHash('md5').update(idSource).digest('hex');
   }
 
@@ -239,6 +241,19 @@ export class VectorStore {
             contentHash: doc.metadata.contentHash ?? '',
             contentType: doc.metadata.contentType,
           };
+
+          // Parent-child chunking metadata
+          if (doc.metadata.chunkType) {
+            baseMetadata.chunkType = doc.metadata.chunkType;
+          }
+          if (doc.metadata.parentChunkId) {
+            baseMetadata.parentChunkId = doc.metadata.parentChunkId;
+          }
+          if (doc.metadata.childChunkIds) {
+            baseMetadata.childChunkIds = JSON.stringify(
+              doc.metadata.childChunkIds,
+            );
+          }
 
           if (doc.metadata.coordinates) {
             baseMetadata.coordinates = JSON.stringify(doc.metadata.coordinates);
@@ -730,6 +745,96 @@ export class VectorStore {
     } catch (error) {
       console.error('Error checking for duplicate document:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Retrieve parent chunks by their parent IDs
+   * Used in specific query path to get full context after retrieving child chunks
+   * @param parentIds - Array of parent chunk IDs to retrieve
+   * @returns Promise<SearchResult[]> - Array of parent chunks
+   */
+  async getParentChunksByIds(parentIds: string[]): Promise<SearchResult[]> {
+    try {
+      if (parentIds.length === 0) {
+        return [];
+      }
+
+      console.log(
+        `[VectorStore] Retrieving ${parentIds.length} parent chunks...`,
+      );
+      const index = this.pinecone.index(this.indexName);
+
+      // Create a dummy embedding for querying
+      const dummyEmbedding = new Array(1536).fill(0);
+
+      // Query for parent chunks
+      // Note: Pinecone doesn't support $in filter, so we need to query multiple times
+      // or use a different approach
+      const allParents: SearchResult[] = [];
+
+      // Batch queries to avoid overwhelming the API
+      const batchSize = 10;
+      for (let i = 0; i < parentIds.length; i += batchSize) {
+        const batch = parentIds.slice(i, i + batchSize);
+
+        // Query for each parent ID (not ideal, but Pinecone limitation)
+        const batchResults = await Promise.all(
+          batch.map(async (parentId) => {
+            try {
+              const queryResponse = await index.query({
+                vector: dummyEmbedding,
+                topK: 100,
+                includeMetadata: true,
+                includeValues: false,
+                filter: {
+                  chunkType: { $eq: 'parent' },
+                },
+              });
+
+              // Filter client-side for the specific parent ID
+              const match = queryResponse.matches?.find((m) => {
+                const childIds =
+                  typeof m.metadata?.childChunkIds === 'string'
+                    ? JSON.parse(m.metadata.childChunkIds as string)
+                    : m.metadata?.childChunkIds;
+                // Check if this parent contains the child we're looking for
+                return (
+                  childIds &&
+                  Array.isArray(childIds) &&
+                  childIds.includes(parentId)
+                );
+              });
+
+              if (match) {
+                return {
+                  score: 1.0, // Parent chunks are retrieved for context, not ranked
+                  metadata: match.metadata as unknown as SearchResult['metadata'],
+                };
+              }
+              return null;
+            } catch (error) {
+              console.error(
+                `[VectorStore] Error retrieving parent ${parentId}:`,
+                error,
+              );
+              return null;
+            }
+          }),
+        );
+
+        allParents.push(
+          ...(batchResults.filter((r) => r !== null) as SearchResult[]),
+        );
+      }
+
+      console.log(
+        `[VectorStore] Retrieved ${allParents.length} parent chunks`,
+      );
+      return allParents;
+    } catch (error) {
+      console.error('[VectorStore] Error retrieving parent chunks:', error);
+      return [];
     }
   }
 }
