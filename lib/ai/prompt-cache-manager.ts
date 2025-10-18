@@ -70,6 +70,61 @@ export class PromptCacheManager {
   }
 
   /**
+   * Create a cacheable system message with multiple documents
+   * Each document content will be cached for 5 minutes
+   */
+  static createMultiDocumentCachedSystemMessage(
+    basePrompt: string,
+    documentContents: FullDocumentContent[],
+  ): Anthropic.Messages.MessageCreateParamsNonStreaming['system'] {
+    if (documentContents.length === 0) {
+      return [{ type: 'text', text: basePrompt }];
+    }
+
+    // For single document, use the optimized single-document method
+    if (documentContents.length === 1) {
+      return this.createCachedSystemMessage(basePrompt, documentContents[0]);
+    }
+
+    const result: Anthropic.Messages.MessageCreateParamsNonStreaming['system'] = [
+      {
+        type: 'text',
+        text: basePrompt,
+      },
+    ];
+
+    let totalEstimatedTokens = 0;
+
+    // Add each document as a separate cached block
+    for (const doc of documentContents) {
+      const docText = this.formatDocumentForCaching(doc);
+      const estimatedTokens = Math.ceil(docText.length / 3.5);
+      totalEstimatedTokens += estimatedTokens;
+
+      if (estimatedTokens >= this.MIN_CACHE_TOKENS) {
+        // Add as cached content
+        result.push({
+          type: 'text',
+          text: `# Document: ${doc.metadata.filename}\n\nThe following is the complete content of "${doc.metadata.filename}" for analysis:\n\n${docText}`,
+          cache_control: { type: 'ephemeral' },
+        });
+      } else {
+        // Too small for caching, add as regular text
+        result.push({
+          type: 'text',
+          text: `# Document: ${doc.metadata.filename}\n\n${docText}`,
+        });
+      }
+    }
+
+    console.log(
+      `[PromptCache] Created multi-document cached message with ${documentContents.length} documents (~${totalEstimatedTokens.toLocaleString()} total tokens)`,
+    );
+
+    return result;
+  }
+
+  /**
    * Format document content for caching
    * Includes metadata and structured formatting
    */

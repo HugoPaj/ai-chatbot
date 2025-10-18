@@ -307,6 +307,7 @@ export class DocumentRetrievalService {
    * - Checks document size
    * - If <200K tokens: loads entire document with prompt caching
    * - If >200K tokens: uses adaptive chunking (fallback to standard retrieval)
+   * - Supports multiple documents within token limit
    */
   private async getDocumentContextBroad(
     query: string,
@@ -318,10 +319,10 @@ export class DocumentRetrievalService {
       '[RAG] Using BROAD query path (comprehensive analysis)',
     );
 
-    // Step 1: Get initial results to identify the target document
+    // Step 1: Get initial results to identify the target documents
     const initialResults = await this.vectorStore.searchSimilar(
       query,
-      50, // Just need enough to identify the document
+      50, // Just need enough to identify the documents
       undefined,
       true, // Use reranking
     );
@@ -336,55 +337,130 @@ export class DocumentRetrievalService {
       return { results: [] };
     }
 
-    // Identify the primary document (most represented in top results)
-    const targetFilename = parentResults[0].metadata.filename;
-    console.log(`[RAG] Target document: "${targetFilename}"`);
+    // Step 2: Identify ALL unique documents from the top results
+    const documentFilenames = new Set<string>();
+    const filenameToScore = new Map<string, number>();
 
-    // Step 2: Get ALL chunks from this document (not just top matches)
-    console.log('[RAG] Fetching ALL chunks from document for full context...');
-    const allDocChunks = await this.vectorStore.getAllChunksByFilename(
-      targetFilename,
-    );
+    // Collect unique filenames and track their best scores
+    for (const result of parentResults) {
+      const filename = result.metadata.filename;
+      documentFilenames.add(filename);
+
+      // Track the highest score for each document
+      const currentScore = filenameToScore.get(filename) || 0;
+      if (result.score > currentScore) {
+        filenameToScore.set(filename, result.score);
+      }
+    }
 
     console.log(
-      `[RAG] Retrieved ${allDocChunks.length} total chunks from document`,
+      `[RAG] Found ${documentFilenames.size} unique document(s) in top results`,
     );
 
-    if (allDocChunks.length === 0) {
+    // Sort documents by their best score (highest first)
+    const sortedDocuments = Array.from(documentFilenames).sort((a, b) => {
+      const scoreA = filenameToScore.get(a) || 0;
+      const scoreB = filenameToScore.get(b) || 0;
+      return scoreB - scoreA;
+    });
+
+    console.log(
+      `[RAG] Documents by relevance: ${sortedDocuments.map(f => `"${f}"`).join(', ')}`,
+    );
+
+    // Step 3: Fetch chunks from all relevant documents
+    const MAX_TOKENS_FOR_FULL_LOAD = 200_000; // 200K token limit
+    let totalTokensLoaded = 0;
+    const allDocumentChunks: SearchResult[] = [];
+    const documentsLoaded: string[] = [];
+
+    for (const filename of sortedDocuments) {
+      console.log(`[RAG] Fetching chunks from "${filename}"...`);
+
+      const docChunks = await this.vectorStore.getAllChunksByFilename(
+        filename,
+      );
+
+      console.log(
+        `[RAG] Retrieved ${docChunks.length} chunks from "${filename}"`,
+      );
+
+      if (docChunks.length === 0) {
+        continue;
+      }
+
+      // Analyze this document's size
+      const docInfo = DocumentLoader.analyzeDocument(docChunks);
+
+      console.log(
+        `[RAG] Document "${filename}": ${docInfo.totalTokens.toLocaleString()} tokens`,
+      );
+
+      // Check if adding this document would exceed the token limit
+      if (totalTokensLoaded + docInfo.totalTokens <= MAX_TOKENS_FOR_FULL_LOAD) {
+        allDocumentChunks.push(...docChunks);
+        totalTokensLoaded += docInfo.totalTokens;
+        documentsLoaded.push(filename);
+
+        console.log(
+          `[RAG] ✅ Added "${filename}" (total: ${totalTokensLoaded.toLocaleString()} tokens)`,
+        );
+      } else {
+        console.log(
+          `[RAG] ⚠️ Skipping "${filename}" - would exceed 200K token limit`,
+        );
+        break; // Stop loading more documents
+      }
+    }
+
+    if (allDocumentChunks.length === 0) {
       return { results: parentResults };
     }
 
-    // Step 3: Analyze document size
-    const docInfo = DocumentLoader.analyzeDocument(allDocChunks);
-
     console.log(
-      `[RAG] Document "${docInfo.filename}": ${docInfo.totalTokens.toLocaleString()} tokens`,
+      `[RAG] Loaded ${documentsLoaded.length} document(s) with ${allDocumentChunks.length} total chunks (${totalTokensLoaded.toLocaleString()} tokens)`,
     );
 
-    // Step 4: Decide whether to load full document
-    if (docInfo.canLoadFully) {
+    // Step 4: Check if we can load documents fully
+    if (totalTokensLoaded <= MAX_TOKENS_FOR_FULL_LOAD && documentsLoaded.length > 0) {
       console.log(
-        `[RAG] ✅ Loading full document (under 200K token limit)`,
+        `[RAG] ✅ Loading ${documentsLoaded.length} document(s) fully (under 200K token limit)`,
       );
 
-      const fullDoc = DocumentLoader.loadFullDocument(allDocChunks);
+      // For multi-document support, we'll return all chunks
+      // The fullDocument field is designed for single documents with caching
+      // For multiple documents, we return all chunks without the fullDocument optimization
+      if (documentsLoaded.length === 1) {
+        // Single document - use full document optimization with caching
+        const fullDoc = DocumentLoader.loadFullDocument(allDocumentChunks);
 
-      if (fullDoc) {
+        if (fullDoc) {
+          console.log(
+            `[RAG] 📄 Full document loaded: ${fullDoc.metadata.totalTokens.toLocaleString()} tokens`,
+          );
+
+          // Log cache efficiency info
+          PromptCacheManager.logCacheInfo(fullDoc.metadata.totalTokens);
+
+          return {
+            results: allDocumentChunks,
+            fullDocument: fullDoc,
+          };
+        }
+      } else {
+        // Multiple documents - return all chunks without full document optimization
         console.log(
-          `[RAG] 📄 Full document loaded: ${fullDoc.metadata.totalTokens.toLocaleString()} tokens`,
+          `[RAG] 📚 Multiple documents loaded: ${documentsLoaded.map(f => `"${f}"`).join(', ')}`,
         );
 
-        // Log cache efficiency info
-        PromptCacheManager.logCacheInfo(fullDoc.metadata.totalTokens);
-
         return {
-          results: allDocChunks, // Return ALL chunks, not just top matches
-          fullDocument: fullDoc,
+          results: allDocumentChunks, // All chunks from multiple documents
+          fullDocument: undefined, // No single document caching for multi-doc
         };
       }
     } else {
       console.log(
-        `[RAG] ⚠️ Document exceeds 200K token limit, using standard retrieval`,
+        `[RAG] ⚠️ Documents exceed 200K token limit, using standard retrieval`,
       );
     }
 
